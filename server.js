@@ -127,6 +127,19 @@ app.all('/api/sheets/separate-sheets', async (req, res) => {
   }
 });
 
+// Endpoint diagnosis struktur Google Sheets
+app.get('/api/sheets/diagnose', async (req, res) => {
+  try {
+    if (cloudAdapter && typeof cloudAdapter.diagnose === 'function') {
+      const result = await cloudAdapter.diagnose();
+      return res.json(result);
+    }
+    res.status(400).json({ success: false, error: 'Google Sheets Adapter tidak aktif pada server ini.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 1. Ambil Semua Flok / Kandang
 app.get('/api/flocks', async (req, res) => {
   try {

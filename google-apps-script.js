@@ -574,6 +574,25 @@ function doPost(e) {
       case 'ping':
         result = { success: true, message: 'Pong dari Google Sheets!' };
         break;
+      case 'diagnose':
+        var allSh = ss.getSheets();
+        var report = [];
+        for (var d = 0; d < allSh.length; d++) {
+          var sObj = allSh[d];
+          var lastR = sObj.getLastRow();
+          var lastC = sObj.getLastColumn();
+          var h = lastR > 0 && lastC > 0 ? sObj.getRange(1, 1, 1, lastC).getValues()[0] : [];
+          var sample = lastR > 1 && lastC > 0 ? sObj.getRange(2, 1, Math.min(lastR - 1, 10), lastC).getValues() : [];
+          report.push({
+            name: sObj.getName(),
+            rowCount: lastR,
+            colCount: lastC,
+            headers: h,
+            sampleRows: sample
+          });
+        }
+        result = { success: true, sheets: report };
+        break;
       case 'separateSheets':
       case 'migrateSheets':
       case 'migrateHeaders':

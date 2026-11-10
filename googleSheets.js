@@ -295,5 +295,11 @@ module.exports = {
   async separateSheets() {
     const result = await callScript('separateSheets');
     return result;
+  },
+
+  // 11. Diagnosis Struktur Seluruh Sheet
+  async diagnose() {
+    const result = await callScript('diagnose');
+    return result;
   }
 };
