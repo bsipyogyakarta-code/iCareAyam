@@ -114,6 +114,19 @@ app.all('/api/sheets/migrate-headers', async (req, res) => {
   }
 });
 
+// Endpoint untuk memisahkan sheet ayam pedaging dan petelur
+app.all('/api/sheets/separate-sheets', async (req, res) => {
+  try {
+    if (cloudAdapter && typeof cloudAdapter.separateSheets === 'function') {
+      const result = await cloudAdapter.separateSheets();
+      return res.json({ success: true, message: 'Sheet ayam pedaging dan petelur berhasil dipisahkan!', result });
+    }
+    res.status(400).json({ success: false, error: 'Google Sheets Adapter tidak aktif pada server ini.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 1. Ambil Semua Flok / Kandang
 app.get('/api/flocks', async (req, res) => {
   try {
@@ -386,8 +399,23 @@ app.post('/api/flocks/:id/weighings', upload.single('photo'), async (req, res) =
       }
     }
 
+    // Cari informasi tipe pemeliharaan flok (pedaging atau petelur)
+    let prodType = '';
+    if (cloudAdapter) {
+      const currentFlock = await cloudAdapter.getFlockById(flockId);
+      if (currentFlock) {
+        prodType = currentFlock.production_type || currentFlock.productionType || '';
+      }
+    } else {
+      const currentFlock = localDb.getFlockById(flockId);
+      if (currentFlock) {
+        prodType = currentFlock.production_type || currentFlock.productionType || '';
+      }
+    }
+
     const payload = {
       flockId,
+      productionType: prodType,
       week: finalWeek,
       day: finalAgeDays,
       date,

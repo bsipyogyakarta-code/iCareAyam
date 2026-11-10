@@ -178,6 +178,7 @@ module.exports = {
     const record = {
       id,
       flock_id: weighing.flockId,
+      production_type: weighing.productionType || weighing.production_type || '',
       week: week,
       date: weighing.date,
       age_days: ageDays,
@@ -224,6 +225,12 @@ module.exports = {
   // 9. Migrasi / Perbarui Header Kolom Spreadsheet ke Bahasa Indonesia
   async migrateHeaders() {
     const result = await callScript('migrateHeaders');
+    return result;
+  },
+
+  // 10. Pisahkan Sheet Pedaging dan Petelur
+  async separateSheets() {
+    const result = await callScript('separateSheets');
     return result;
   }
 };
