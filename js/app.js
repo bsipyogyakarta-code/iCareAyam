@@ -28,11 +28,8 @@ function toggleTheme() {
   localStorage.setItem('BRMP_THEME', newTheme);
   updateThemeIcon(newTheme);
 
-  if (activeProductionType === 'broiler' && currentActiveFlock && currentStandard) {
-    window.renderGrowthChart(currentActiveFlock, currentStandard);
-    window.renderGainChart(currentActiveFlock);
-    const latest = getLatestWeighing(currentActiveFlock);
-    window.renderDistributionChart(latest);
+  if (activeProductionType === 'broiler' && currentActiveFlock) {
+    window.renderGrowthChart(currentActiveFlock);
   }
 }
 
@@ -131,7 +128,7 @@ function renderFlockDropdown() {
 
   select.innerHTML = flocks.map(f => `
     <option value="${f.id}" ${f.id === activeId ? 'selected' : ''}>
-      ${f.name} (${f.code})
+      ${f.name}
     </option>
   `).join('');
 }
@@ -196,10 +193,7 @@ function setActiveFlock(flock) {
   document.getElementById('broilerAnalytics').closest('details').style.display = isBroiler ? 'block' : 'none';
   document.getElementById('broilerAnalytics').style.display = isBroiler ? 'block' : 'none';
   if (isBroiler) {
-    window.renderGrowthChart(currentActiveFlock, currentStandard);
-    window.renderGainChart(currentActiveFlock);
-    window.renderDistributionChart(getLatestWeighing(currentActiveFlock));
-    renderGrowthInsights(getLatestWeighing(currentActiveFlock));
+    window.renderGrowthChart(currentActiveFlock);
   }
   renderWeighingsTable();
 }

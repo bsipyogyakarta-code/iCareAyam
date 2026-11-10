@@ -217,67 +217,28 @@
         </div>
       </section>
 
-      <!-- Smart Recommendations & Insights Banner -->
+      <!-- Visualisasi Grafik Perkembangan Bobot -->
       <details class="advanced-section">
         <summary>Lihat grafik perkembangan bobot</summary>
-      <div id="broilerAnalytics">
-      <section id="growthInsightCard" class="growth-insight-card">
-        <!-- Injected via JavaScript -->
-      </section>
-
-      <!-- Visualisasi Grafik Utama (Kurva Pertumbuhan & Sebaran Keseragaman) -->
-      <section class="charts-grid">
-        <!-- Main Growth Curve Line Chart -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title-group">
-              <h2>
-                Kurva Pertumbuhan Mingguan (Aktual vs Standar BRMP)
-                <span class="info-tip" data-tooltip="Garis hijau adalah bobot timbangan Anda. Garis biru putus-putus adalah acuan standar BRMP.">?</span>
-              </h2>
-              <p>Melihat apakah grafik bobot ayam tumbuh sesuai laju pertumbuhan ideal</p>
+        <div id="broilerAnalytics">
+          <section class="charts-grid">
+            <!-- Main Growth Curve Line Chart -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title-group">
+                  <h2>Grafik Perkembangan Bobot Ayam</h2>
+                  <p>Grafik bobot ayam hasil penimbangan</p>
+                </div>
+                <span class="badge-status optimal">
+                  <i class="fa-solid fa-database" style="font-size: 0.65rem;"></i> Database Live
+                </span>
+              </div>
+              <div class="chart-wrapper">
+                <canvas id="growthChart"></canvas>
+              </div>
             </div>
-            <span class="badge-status optimal">
-              <i class="fa-solid fa-database" style="font-size: 0.65rem;"></i> Database Live
-            </span>
-          </div>
-          <div class="chart-wrapper">
-            <canvas id="growthChart"></canvas>
-          </div>
+          </section>
         </div>
-
-        <!-- Flock Uniformity Doughnut Chart -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title-group">
-              <h2>
-                Keseragaman Sampling Terkini
-                <span class="info-tip" data-tooltip="Memperlihatkan proporsi ayam yang pas dengan target, terlalu kecil (underweight), atau terlalu besar.">?</span>
-              </h2>
-              <p>Distribusi bobot ayam sampel timbangan (toleransi ±10%)</p>
-            </div>
-          </div>
-          <div class="chart-wrapper donut">
-            <canvas id="distributionChart"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <!-- Sub Charts Row: Pertambahan Bobot Harian + ADG -->
-      <section class="sub-charts-row">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title-group">
-              <h2>Kenaikan Bobot Harian (Gain) & Rata-rata Kenaikan Harian (ADG)</h2>
-              <p>Mendeteksi laju pertambahan bobot ayam antar hari pencatatan</p>
-            </div>
-          </div>
-          <div class="chart-wrapper" style="height: 270px;">
-            <canvas id="gainChart"></canvas>
-          </div>
-        </div>
-      </section>
-      </div>
       </details>
 
       <!-- Data Table Penimbangan Lengkap -->
