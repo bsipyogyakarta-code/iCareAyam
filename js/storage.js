@@ -45,48 +45,10 @@ class ApiClient {
       const res = await fetch(`${API_BASE}/flocks`);
       const json = await res.json();
       if (json.success) {
-        // Jika backend kosong tetapi browser punya data lokal (akibat Vercel restart), pulihkan otomatis
-        if (json.data.length === 0) {
-          const mirror = this.getLocalMirror();
-          if (mirror && mirror.length > 0) {
-            console.log('🔄 Memulihkan data dari sinkronisasi lokal ke Vercel backend...');
-            for (const f of mirror) {
-              await this.createFlock(f);
-              if (f.weighings && f.weighings.length > 0) {
-                for (const w of f.weighings) {
-                  const fd = new FormData();
-                  fd.append('day', w.day || w.ageDays || w.week * 7);
-                  fd.append('week', w.week || Math.max(1, Math.ceil((w.day || w.ageDays || 7) / 7)));
-                  fd.append('date', w.date);
-                  fd.append('ageDays', w.ageDays || w.day || w.week * 7);
-                  fd.append('avgWeight', w.avgWeight);
-                  fd.append('targetWeight', w.targetWeight);
-                  fd.append('sampleCount', w.sampleCount || 30);
-                  fd.append('samples', JSON.stringify(w.samples || []));
-                  fd.append('uniformity', w.uniformity || 90);
-                  fd.append('feedIntakeKg', w.feedIntakeKg || 0);
-                  fd.append('mortality', w.mortality || 0);
-                  fd.append('cull', w.cull || 0);
-                  fd.append('populationAdded', w.populationAdded || 0);
-                  fd.append('populationDecreased', w.populationDecreased || 0);
-                  fd.append('populationShipped', w.populationShipped || 0);
-                  fd.append('eggCount', w.eggCount || 0);
-                  fd.append('eggWeightKg', w.eggWeightKg || 0);
-                  fd.append('healthNote', w.healthNote || '');
-                  await this.saveWeighing(f.id, fd);
-                }
-              }
-            }
-            const syncedRes = await fetch(`${API_BASE}/flocks`);
-            const syncedJson = await syncedRes.json();
-            return syncedJson.data;
-          }
-        }
-
-        if (json.data.length > 0) {
+        if (json.data && json.data.length > 0) {
           this.saveLocalMirror(json.data);
         }
-        return json.data;
+        return json.data || [];
       }
       throw new Error(json.error || 'Gagal memuat data kandang/flok');
     } catch (err) {

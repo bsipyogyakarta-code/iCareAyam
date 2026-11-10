@@ -108,7 +108,7 @@ async function loadDataFromBackend() {
     activeProductionType = getProductionType(active);
     renderFlockDropdown();
     window.apiClient.setActiveFlockId(active.id);
-    setActiveFlock(active);
+    await setActiveFlock(active);
   } catch (err) {
     console.error('Error loading data:', err);
     showToast('Koneksi ke backend gagal. Pastikan server aktif.', 'error');
@@ -137,7 +137,7 @@ function getProductionType(flock) {
   return flock?.productionType || (flock?.breed === 'layer' ? 'layer' : 'broiler');
 }
 
-function setProductionType(type) {
+async function setProductionType(type) {
   activeProductionType = type === 'layer' ? 'layer' : 'broiler';
   localStorage.setItem('BRMP_ACTIVE_PRODUCTION_TYPE', activeProductionType);
   document.querySelectorAll('.production-switch-btn').forEach(button => {
@@ -148,7 +148,7 @@ function setProductionType(type) {
   const flock = allFlocks.find(item => getProductionType(item) === activeProductionType);
   if (flock) {
     window.apiClient.setActiveFlockId(flock.id);
-    setActiveFlock(flock);
+    await setActiveFlock(flock);
   } else {
     window.apiClient.setActiveFlockId(null);
     currentActiveFlock = null;
@@ -173,7 +173,7 @@ function hideEmptyFlockState() {
   document.getElementById('flockControlSection').style.display = 'flex';
 }
 
-function setActiveFlock(flock) {
+async function setActiveFlock(flock) {
   currentActiveFlock = flock;
   hideEmptyFlockState();
   activeProductionType = getProductionType(flock);
@@ -196,6 +196,28 @@ function setActiveFlock(flock) {
     window.renderGrowthChart(currentActiveFlock);
   }
   renderWeighingsTable();
+
+  // Ambil data timbangan terbaru langsung dari server untuk kandang aktif ini
+  try {
+    const detail = await window.apiClient.getFlock(flock.id);
+    if (detail && detail.weighings) {
+      currentActiveFlock.weighings = detail.weighings;
+      currentActiveFlock.currentPop = detail.currentPop != null ? detail.currentPop : currentActiveFlock.currentPop;
+      const cached = allFlocks.find(item => item.id === flock.id);
+      if (cached) {
+        cached.weighings = detail.weighings;
+        cached.currentPop = detail.currentPop;
+      }
+      renderFlockMeta();
+      renderKPIs();
+      if (isBroiler) {
+        window.renderGrowthChart(currentActiveFlock);
+      }
+      renderWeighingsTable();
+    }
+  } catch (err) {
+    console.warn('Gagal memuat detail penimbangan kandang:', err);
+  }
 }
 
 function updateCategoryIntro() {
@@ -439,12 +461,12 @@ function setupEventListeners() {
 
   const flockSelect = document.getElementById('flockSelect');
   if (flockSelect) {
-    flockSelect.addEventListener('change', (e) => {
+    flockSelect.addEventListener('change', async (e) => {
       const selectedId = e.target.value;
       if (selectedId) {
         window.apiClient.setActiveFlockId(selectedId);
         const f = allFlocks.find(item => item.id === selectedId);
-        if (f) setActiveFlock(f);
+        if (f) await setActiveFlock(f);
       }
     });
   }
@@ -698,11 +720,31 @@ async function saveDailyRecord(type) {
   if (photo) formData.append('photo', photo);
 
   try {
-    await window.apiClient.saveWeighing(currentActiveFlock.id, formData);
+    const saved = await window.apiClient.saveWeighing(currentActiveFlock.id, formData);
     document.getElementById(isLayer ? 'modalLayerProduction' : 'modalBroilerMonitoring').classList.remove('active');
     currentEditingRecordId = null;
     showToast(`Catatan hari ke-${day} berhasil disimpan.`, 'success');
-    await loadDataFromBackend();
+
+    // Langsung perbarui data di memori jika response menyertakan data timbangan terbaru
+    if (saved && saved.weighings) {
+      currentActiveFlock.weighings = saved.weighings;
+      if (saved.flock) {
+        currentActiveFlock.currentPop = saved.flock.currentPop != null ? saved.flock.currentPop : currentActiveFlock.currentPop;
+      }
+      const cached = allFlocks.find(item => item.id === currentActiveFlock.id);
+      if (cached) {
+        cached.weighings = saved.weighings;
+        if (saved.flock) cached.currentPop = saved.flock.currentPop;
+      }
+      renderFlockMeta();
+      renderKPIs();
+      if (activeProductionType === 'broiler') {
+        window.renderGrowthChart(currentActiveFlock);
+      }
+      renderWeighingsTable();
+    } else {
+      await setActiveFlock(currentActiveFlock);
+    }
   } catch (error) {
     showToast(`Catatan belum berhasil disimpan: ${error.message}`, 'error');
   }
@@ -714,7 +756,7 @@ async function deleteWeighingData(identifier, dayNumber) {
   try {
     await window.apiClient.deleteWeighing(currentActiveFlock.id, identifier);
     showToast(`Catatan hari ke-${displayDay} telah dihapus.`, 'success');
-    await loadDataFromBackend();
+    await setActiveFlock(currentActiveFlock);
   } catch (err) {
     showToast('Gagal menghapus data: ' + err.message, 'error');
   }
