@@ -144,7 +144,26 @@ app.get('/api/sheets/diagnose', async (req, res) => {
 app.get('/api/flocks', async (req, res) => {
   try {
     if (cloudAdapter) {
-      const flocks = await cloudAdapter.getAllFlocks();
+      const rawFlocks = await cloudAdapter.getAllFlocks();
+      
+      // Deduplikasi otomatis: Gabungkan flok dengan kode / nama identik agar dropdown bersih
+      const flockMap = new Map();
+      for (const f of rawFlocks) {
+        const key = f.code || f.name || f.id;
+        if (!flockMap.has(key)) {
+          flockMap.set(key, { ...f });
+        } else {
+          const existing = flockMap.get(key);
+          // Pertahankan flok yang memiliki data penimbangan terbanyak
+          const existingCount = (existing.weighings || []).length;
+          const currentCount = (f.weighings || []).length;
+          if (currentCount > existingCount) {
+            flockMap.set(key, { ...f });
+          }
+        }
+      }
+
+      const flocks = Array.from(flockMap.values());
       const result = flocks.map(f => {
         const weighings = f.weighings || [];
         return {
