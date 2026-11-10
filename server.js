@@ -69,6 +69,15 @@ app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname)));
 
+// Route utama untuk melayani index.html
+app.get('/', (req, res) => {
+  const indexPath = path.join(__dirname, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  return res.sendFile(path.join(process.cwd(), 'index.html'));
+});
+
 // ==========================================
 // API ROUTES
 // ==========================================
