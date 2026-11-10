@@ -25,18 +25,113 @@
  */
 
 var FLOCK_HEADERS = [
-  'id', 'name', 'code', 'breed', 'production_type',
-  'doc_date', 'initial_pop', 'current_pop', 'cage_type',
-  'location', 'officer', 'notes', 'created_at'
+  'ID Kandang', 'Nama Kandang', 'Kode Batch', 'Jenis/Galur Ayam', 'Tipe Pemeliharaan',
+  'Tanggal DOC Masuk', 'Populasi Awal (ekor)', 'Populasi Saat Ini (ekor)', 'Tipe Kandang',
+  'Lokasi Kandang', 'Petugas/PIC', 'Catatan Kandang', 'Waktu Dibuat'
 ];
 
 var WEIGHING_HEADERS = [
-  'id', 'flock_id', 'week', 'date', 'age_days',
-  'avg_weight', 'target_weight', 'sample_count', 'samples_json',
-  'uniformity', 'feed_intake_kg', 'mortality', 'cull',
-  'population_added', 'population_decreased', 'population_shipped',
-  'egg_count', 'egg_weight_kg', 'health_note', 'photo_url', 'created_at'
+  'ID Catatan', 'ID Kandang', 'Minggu Ke-', 'Tanggal Catat', 'Hari Ke- (Umur)',
+  'Bobot Rata-rata (gram)', 'Target Bobot (gram)', 'Jumlah Sampel (ekor)', 'Data Sampel (JSON)',
+  'Keseragaman (%)', 'Pakan Harian (kg)', 'Kematian (ekor)', 'Afkir (ekor)',
+  'Ayam Masuk (ekor)', 'Ayam Berkurang (ekor)', 'Ayam Dipanen/Keluar (ekor)',
+  'Produksi Telur (butir)', 'Bobot Telur (kg)', 'Catatan Kesehatan', 'Foto Dokumentasi', 'Waktu Input'
 ];
+
+// Peta sinonim untuk mendukung pembacaan header Bahasa Indonesia maupun Bahasa Inggris lama
+var HEADER_MAP = {
+  // Weighings
+  'id': 'id',
+  'id catatan': 'id',
+  'flock_id': 'flock_id',
+  'id kandang': 'flock_id',
+  'week': 'week',
+  'minggu ke-': 'week',
+  'minggu': 'week',
+  'date': 'date',
+  'tanggal catat': 'date',
+  'tanggal': 'date',
+  'age_days': 'age_days',
+  'hari ke- (umur)': 'age_days',
+  'hari ke-': 'age_days',
+  'umur (hari)': 'age_days',
+  'day': 'age_days',
+  'avg_weight': 'avg_weight',
+  'bobot rata-rata (gram)': 'avg_weight',
+  'bobot rata-rata': 'avg_weight',
+  'target_weight': 'target_weight',
+  'target bobot (gram)': 'target_weight',
+  'target bobot': 'target_weight',
+  'sample_count': 'sample_count',
+  'jumlah sampel (ekor)': 'sample_count',
+  'jumlah sampel': 'sample_count',
+  'samples_json': 'samples_json',
+  'data sampel (json)': 'samples_json',
+  'uniformity': 'uniformity',
+  'keseragaman (%)': 'uniformity',
+  'keseragaman': 'uniformity',
+  'feed_intake_kg': 'feed_intake_kg',
+  'pakan harian (kg)': 'feed_intake_kg',
+  'pakan harian': 'feed_intake_kg',
+  'mortality': 'mortality',
+  'kematian (ekor)': 'mortality',
+  'kematian': 'mortality',
+  'cull': 'cull',
+  'afkir (ekor)': 'cull',
+  'afkir': 'cull',
+  'population_added': 'population_added',
+  'ayam masuk (ekor)': 'population_added',
+  'population_decreased': 'population_decreased',
+  'ayam berkurang (ekor)': 'population_decreased',
+  'population_shipped': 'population_shipped',
+  'ayam dipanen/keluar (ekor)': 'population_shipped',
+  'egg_count': 'egg_count',
+  'produksi telur (butir)': 'egg_count',
+  'jumlah telur (butir)': 'egg_count',
+  'egg_weight_kg': 'egg_weight_kg',
+  'bobot telur (kg)': 'egg_weight_kg',
+  'total bobot telur (kg)': 'egg_weight_kg',
+  'health_note': 'health_note',
+  'catatan kesehatan': 'health_note',
+  'photo_url': 'photo_url',
+  'foto dokumentasi': 'photo_url',
+  'link foto dokumentasi': 'photo_url',
+  'created_at': 'created_at',
+  'waktu input': 'created_at',
+
+  // Flocks
+  'nama kandang': 'name',
+  'name': 'name',
+  'kode batch': 'code',
+  'kode': 'code',
+  'code': 'code',
+  'jenis/galur ayam': 'breed',
+  'jenis ayam': 'breed',
+  'breed': 'breed',
+  'tipe pemeliharaan': 'production_type',
+  'production_type': 'production_type',
+  'tanggal doc masuk': 'doc_date',
+  'tanggal doc': 'doc_date',
+  'doc_date': 'doc_date',
+  'populasi awal (ekor)': 'initial_pop',
+  'populasi awal': 'initial_pop',
+  'initial_pop': 'initial_pop',
+  'populasi saat ini (ekor)': 'current_pop',
+  'populasi saat ini': 'current_pop',
+  'current_pop': 'current_pop',
+  'tipe kandang': 'cage_type',
+  'cage_type': 'cage_type',
+  'lokasi kandang': 'location',
+  'lokasi': 'location',
+  'location': 'location',
+  'petugas/pic': 'officer',
+  'petugas pic': 'officer',
+  'petugas': 'officer',
+  'officer': 'officer',
+  'catatan kandang': 'notes',
+  'notes': 'notes',
+  'waktu dibuat': 'created_at'
+};
 
 function getOrCreateSheet(sheetName, headers) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -47,7 +142,8 @@ function getOrCreateSheet(sheetName, headers) {
     sheet.getRange(1, 1, 1, headers.length)
       .setFontWeight('bold')
       .setBackground('#24580b')
-      .setFontColor('#ffffff');
+      .setFontColor('#ffffff')
+      .setHorizontalAlignment('center');
     sheet.setFrozenRows(1);
   }
   return sheet;
@@ -59,7 +155,7 @@ function getSheetObjects(sheet) {
   if (lastRow <= 1 || lastCol < 1) return [];
   
   var data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
-  var headers = data[0];
+  var rawHeaders = data[0];
   var rows = [];
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = ss.getSpreadsheetTimeZone() || 'Asia/Jakarta';
@@ -67,17 +163,103 @@ function getSheetObjects(sheet) {
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
     var obj = { _rowIndex: i + 1 };
-    for (var j = 0; j < headers.length; j++) {
-      var header = headers[j];
+    for (var j = 0; j < rawHeaders.length; j++) {
+      var headerText = String(rawHeaders[j] || '').trim();
+      var cleanKey = headerText.toLowerCase();
+      var canonicalKey = HEADER_MAP[cleanKey] || cleanKey;
       var val = row[j];
       if (val instanceof Date) {
         val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
       }
-      obj[header] = val;
+      obj[canonicalKey] = val;
+      if (headerText && headerText !== canonicalKey) {
+        obj[headerText] = val;
+      }
     }
     rows.push(obj);
   }
   return rows;
+}
+
+/**
+ * Menu otomatis saat Spreadsheet dibuka oleh pengguna di browser
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🐔 PoultryTrack BRMP')
+    .addItem('🇮🇩 Perbarui Header ke Bahasa Indonesia', 'perbaruiHeaderKeBahasaIndonesia')
+    .addItem('✨ Rapikan Format Tabel & Kolom', 'rapikanTampilanSheet')
+    .addToUi();
+}
+
+/**
+ * Fungsi sekali klik untuk mengubah header bahasa Inggris lama ke Bahasa Indonesia
+ */
+function perbaruiHeaderKeBahasaIndonesia() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. Perbarui Sheet Weighings (Catatan Harian)
+  var sheetW = ss.getSheetByName('Weighings');
+  if (sheetW) {
+    sheetW.getRange(1, 1, 1, WEIGHING_HEADERS.length).setValues([WEIGHING_HEADERS]);
+    sheetW.getRange(1, 1, 1, WEIGHING_HEADERS.length)
+      .setFontWeight('bold')
+      .setBackground('#24580b')
+      .setFontColor('#ffffff')
+      .setHorizontalAlignment('center');
+    sheetW.setFrozenRows(1);
+    for (var i = 1; i <= WEIGHING_HEADERS.length; i++) {
+      sheetW.autoResizeColumn(i);
+    }
+  }
+
+  // 2. Perbarui Sheet Flocks (Master Kandang)
+  var sheetF = ss.getSheetByName('Flocks');
+  if (sheetF) {
+    sheetF.getRange(1, 1, 1, FLOCK_HEADERS.length).setValues([FLOCK_HEADERS]);
+    sheetF.getRange(1, 1, 1, FLOCK_HEADERS.length)
+      .setFontWeight('bold')
+      .setBackground('#24580b')
+      .setFontColor('#ffffff')
+      .setHorizontalAlignment('center');
+    sheetF.setFrozenRows(1);
+    for (var j = 1; j <= FLOCK_HEADERS.length; j++) {
+      sheetF.autoResizeColumn(j);
+    }
+  }
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      'Berhasil Diperbarui!',
+      'Semua judul kolom di sheet "Weighings" dan "Flocks" kini telah disesuaikan ke Bahasa Indonesia yang rapi sesuai format harian.',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } catch (e) {
+    // Mode headless (dipanggil melalui API)
+  }
+}
+
+function rapikanTampilanSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  for (var s = 0; s < sheets.length; s++) {
+    var sh = sheets[s];
+    var lastCol = sh.getLastColumn();
+    if (lastCol > 0) {
+      sh.getRange(1, 1, 1, lastCol)
+        .setFontWeight('bold')
+        .setBackground('#24580b')
+        .setFontColor('#ffffff')
+        .setHorizontalAlignment('center');
+      sh.setFrozenRows(1);
+      for (var c = 1; c <= lastCol; c++) {
+        sh.autoResizeColumn(c);
+      }
+    }
+  }
+  try {
+    SpreadsheetApp.getUi().alert('Format tabel dan lebar kolom berhasil dirapikan!');
+  } catch (e) {}
 }
 
 function doGet(e) {
@@ -104,6 +286,10 @@ function doPost(e) {
     switch (action) {
       case 'ping':
         result = { success: true, message: 'Pong dari Google Sheets!' };
+        break;
+      case 'migrateHeaders':
+        perbaruiHeaderKeBahasaIndonesia();
+        result = { success: true, message: 'Header berhasil diperbarui ke Bahasa Indonesia' };
         break;
       case 'getAllFlocks':
         result = handleGetAllFlocks();

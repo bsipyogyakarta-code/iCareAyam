@@ -59,19 +59,19 @@ module.exports = {
     const result = await callScript('getAllFlocks');
     const flocks = result.data || [];
     return flocks.map(f => ({
-      id: String(f.id),
-      name: f.name || '',
-      code: f.code || '',
-      breed: f.breed || 'kub',
-      production_type: f.production_type || (f.breed === 'layer' ? 'layer' : 'broiler'),
-      doc_date: f.doc_date || '',
-      initial_pop: Number(f.initial_pop || 0),
-      current_pop: Number(f.current_pop != null ? f.current_pop : f.initial_pop || 0),
-      cage_type: f.cage_type || '',
-      location: f.location || '',
-      officer: f.officer || '',
-      notes: f.notes || '',
-      created_at: f.created_at || new Date().toISOString()
+      id: String(f.id || f['ID Kandang'] || ''),
+      name: f.name || f['Nama Kandang'] || '',
+      code: f.code || f['Kode Batch'] || '',
+      breed: f.breed || f['Jenis/Galur Ayam'] || 'kub',
+      production_type: f.production_type || f['Tipe Pemeliharaan'] || (f.breed === 'layer' ? 'layer' : 'broiler'),
+      doc_date: f.doc_date || f['Tanggal DOC Masuk'] || '',
+      initial_pop: Number(f.initial_pop != null ? f.initial_pop : (f['Populasi Awal (ekor)'] != null ? f['Populasi Awal (ekor)'] : 0)),
+      current_pop: Number(f.current_pop != null ? f.current_pop : (f['Populasi Saat Ini (ekor)'] != null ? f['Populasi Saat Ini (ekor)'] : f.initial_pop || 0)),
+      cage_type: f.cage_type || f['Tipe Kandang'] || '',
+      location: f.location || f['Lokasi Kandang'] || '',
+      officer: f.officer || f['Petugas/PIC'] || '',
+      notes: f.notes || f['Catatan Kandang'] || '',
+      created_at: f.created_at || f['Waktu Dibuat'] || new Date().toISOString()
     }));
   },
 
@@ -81,19 +81,19 @@ module.exports = {
     const f = result.data;
     if (!f) return null;
     return {
-      id: String(f.id),
-      name: f.name || '',
-      code: f.code || '',
-      breed: f.breed || 'kub',
-      production_type: f.production_type || (f.breed === 'layer' ? 'layer' : 'broiler'),
-      doc_date: f.doc_date || '',
-      initial_pop: Number(f.initial_pop || 0),
-      current_pop: Number(f.current_pop != null ? f.current_pop : f.initial_pop || 0),
-      cage_type: f.cage_type || '',
-      location: f.location || '',
-      officer: f.officer || '',
-      notes: f.notes || '',
-      created_at: f.created_at || ''
+      id: String(f.id || f['ID Kandang'] || ''),
+      name: f.name || f['Nama Kandang'] || '',
+      code: f.code || f['Kode Batch'] || '',
+      breed: f.breed || f['Jenis/Galur Ayam'] || 'kub',
+      production_type: f.production_type || f['Tipe Pemeliharaan'] || (f.breed === 'layer' ? 'layer' : 'broiler'),
+      doc_date: f.doc_date || f['Tanggal DOC Masuk'] || '',
+      initial_pop: Number(f.initial_pop != null ? f.initial_pop : (f['Populasi Awal (ekor)'] != null ? f['Populasi Awal (ekor)'] : 0)),
+      current_pop: Number(f.current_pop != null ? f.current_pop : (f['Populasi Saat Ini (ekor)'] != null ? f['Populasi Saat Ini (ekor)'] : f.initial_pop || 0)),
+      cage_type: f.cage_type || f['Tipe Kandang'] || '',
+      location: f.location || f['Lokasi Kandang'] || '',
+      officer: f.officer || f['Petugas/PIC'] || '',
+      notes: f.notes || f['Catatan Kandang'] || '',
+      created_at: f.created_at || f['Waktu Dibuat'] || ''
     };
   },
 
@@ -128,39 +128,44 @@ module.exports = {
     const result = await callScript('getWeighingsByFlock', { flockId: String(flockId) });
     const rows = result.data || [];
     return rows.map(r => {
+      let rawSamples = r.samples_json != null ? r.samples_json : r['Data Sampel (JSON)'];
       let parsedSamples = [];
-      if (Array.isArray(r.samples_json)) {
-        parsedSamples = r.samples_json;
-      } else if (typeof r.samples_json === 'string' && r.samples_json) {
+      if (Array.isArray(rawSamples)) {
+        parsedSamples = rawSamples;
+      } else if (typeof rawSamples === 'string' && rawSamples) {
         try {
-          parsedSamples = JSON.parse(r.samples_json);
+          parsedSamples = JSON.parse(rawSamples);
         } catch (e) {
           parsedSamples = [];
         }
       }
+
+      const ageDays = Number(r.age_days != null && r.age_days !== '' ? r.age_days : (r['Hari Ke- (Umur)'] != null && r['Hari Ke- (Umur)'] !== '' ? r['Hari Ke- (Umur)'] : (Number(r.week || r['Minggu Ke-'] || 0) * 7)));
+      const week = Number(r.week != null && r.week !== '' ? r.week : (r['Minggu Ke-'] != null && r['Minggu Ke-'] !== '' ? r['Minggu Ke-'] : Math.max(1, Math.ceil(ageDays / 7))));
+
       return {
-        id: String(r.id),
-        flockId: String(r.flock_id),
-        week: Number(r.week || Math.max(1, Math.ceil(Number(r.age_days || 0) / 7))),
-        day: Number(r.age_days || 0),
-        date: String(r.date || ''),
-        ageDays: Number(r.age_days || 0),
-        avgWeight: Number(r.avg_weight || 0),
-        targetWeight: Number(r.target_weight || 0),
-        sampleCount: Number(r.sample_count || 0),
+        id: String(r.id || r['ID Catatan'] || ''),
+        flockId: String(r.flock_id || r['ID Kandang'] || flockId),
+        week: week,
+        day: ageDays,
+        date: String(r.date || r['Tanggal Catat'] || ''),
+        ageDays: ageDays,
+        avgWeight: Number(r.avg_weight != null ? r.avg_weight : (r['Bobot Rata-rata (gram)'] || 0)),
+        targetWeight: Number(r.target_weight != null ? r.target_weight : (r['Target Bobot (gram)'] || 0)),
+        sampleCount: Number(r.sample_count != null ? r.sample_count : (r['Jumlah Sampel (ekor)'] || 0)),
         samples: parsedSamples,
-        uniformity: Number(r.uniformity || 0),
-        feedIntakeKg: Number(r.feed_intake_kg || 0),
-        mortality: Number(r.mortality || 0),
-        cull: Number(r.cull || 0),
-        populationAdded: Number(r.population_added || 0),
-        populationDecreased: Number(r.population_decreased || 0),
-        populationShipped: Number(r.population_shipped || 0),
-        eggCount: Number(r.egg_count || 0),
-        eggWeightKg: Number(r.egg_weight_kg || 0),
-        healthNote: String(r.health_note || ''),
-        photoUrl: String(r.photo_url || ''),
-        createdAt: String(r.created_at || '')
+        uniformity: Number(r.uniformity != null ? r.uniformity : (r['Keseragaman (%)'] || 0)),
+        feedIntakeKg: Number(r.feed_intake_kg != null ? r.feed_intake_kg : (r['Pakan Harian (kg)'] || 0)),
+        mortality: Number(r.mortality != null ? r.mortality : (r['Kematian (ekor)'] || 0)),
+        cull: Number(r.cull != null ? r.cull : (r['Afkir (ekor)'] || 0)),
+        populationAdded: Number(r.population_added != null ? r.population_added : (r['Ayam Masuk (ekor)'] || 0)),
+        populationDecreased: Number(r.population_decreased != null ? r.population_decreased : (r['Ayam Berkurang (ekor)'] || 0)),
+        populationShipped: Number(r.population_shipped != null ? r.population_shipped : (r['Ayam Dipanen/Keluar (ekor)'] || 0)),
+        eggCount: Number(r.egg_count != null ? r.egg_count : (r['Produksi Telur (butir)'] || 0)),
+        eggWeightKg: Number(r.egg_weight_kg != null ? r.egg_weight_kg : (r['Bobot Telur (kg)'] || 0)),
+        healthNote: String(r.health_note != null ? r.health_note : (r['Catatan Kesehatan'] || '')),
+        photoUrl: String(r.photo_url != null ? r.photo_url : (r['Foto Dokumentasi'] || '')),
+        createdAt: String(r.created_at != null ? r.created_at : (r['Waktu Input'] || ''))
       };
     });
   },
@@ -214,5 +219,11 @@ module.exports = {
       mimeType: mimeType || 'image/jpeg'
     });
     return result.url;
+  },
+
+  // 9. Migrasi / Perbarui Header Kolom Spreadsheet ke Bahasa Indonesia
+  async migrateHeaders() {
+    const result = await callScript('migrateHeaders');
+    return result;
   }
 };

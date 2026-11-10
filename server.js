@@ -101,6 +101,19 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// Endpoint untuk memperbarui header spreadsheet ke Bahasa Indonesia
+app.all('/api/sheets/migrate-headers', async (req, res) => {
+  try {
+    if (cloudAdapter && typeof cloudAdapter.migrateHeaders === 'function') {
+      const result = await cloudAdapter.migrateHeaders();
+      return res.json({ success: true, message: 'Header Google Spreadsheet berhasil diselaraskan ke Bahasa Indonesia!', result });
+    }
+    res.status(400).json({ success: false, error: 'Google Sheets Adapter tidak aktif pada server ini.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 1. Ambil Semua Flok / Kandang
 app.get('/api/flocks', async (req, res) => {
   try {
