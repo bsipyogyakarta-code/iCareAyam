@@ -575,6 +575,7 @@ function doPost(e) {
         result = { success: true, message: 'Pong dari Google Sheets!' };
         break;
       case 'diagnose':
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
         var allSh = ss.getSheets();
         var report = [];
         for (var d = 0; d < allSh.length; d++) {
