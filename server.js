@@ -66,12 +66,19 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Static files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.static(path.join(__dirname)));
+const staticRoot = fs.existsSync(path.join(__dirname, 'index.html'))
+  ? __dirname
+  : path.join(__dirname, '..');
+
+app.use('/css', express.static(path.join(staticRoot, 'css')));
+app.use('/js', express.static(path.join(staticRoot, 'js')));
+app.use('/assets', express.static(path.join(staticRoot, 'assets')));
+app.use('/uploads', express.static(path.join(staticRoot, 'uploads')));
+app.use(express.static(staticRoot));
 
 // Route utama untuk melayani index.html
 app.get('/', (req, res) => {
-  const indexPath = path.join(__dirname, 'index.html');
+  const indexPath = path.join(staticRoot, 'index.html');
   if (fs.existsSync(indexPath)) {
     return res.sendFile(indexPath);
   }
