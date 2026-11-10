@@ -521,8 +521,10 @@ function setupEventListeners() {
     }
   });
 
-  document.getElementById('broilerPhoto').addEventListener('change', validateMonitoringPhoto);
-  document.getElementById('layerPhoto').addEventListener('change', validateMonitoringPhoto);
+  const broilerPhoto = document.getElementById('broilerPhoto');
+  if (broilerPhoto) broilerPhoto.addEventListener('change', validateMonitoringPhoto);
+  const layerPhoto = document.getElementById('layerPhoto');
+  if (layerPhoto) layerPhoto.addEventListener('change', validateMonitoringPhoto);
   document.getElementById('formBroilerMonitoring').addEventListener('submit', handleSaveBroiler);
   document.getElementById('formLayerProduction').addEventListener('submit', handleSaveLayer);
 
@@ -716,7 +718,8 @@ async function saveDailyRecord(type) {
   formData.append('eggWeightKg', isLayer ? Number(document.getElementById('layerEggWeight').value) : 0);
   formData.append('healthNote', document.getElementById(`${prefix}Notes`).value.trim());
 
-  const photo = document.getElementById(`${prefix}Photo`).files[0];
+  const photoInput = document.getElementById(`${prefix}Photo`);
+  const photo = photoInput?.files?.[0];
   if (photo) formData.append('photo', photo);
 
   try {
