@@ -315,7 +315,7 @@ function pisahkanSheetPedagingDanPetelur() {
     var sh = allSheets[s];
     var sName = sh.getName();
     if (sName === SHEET_NAMES.FLOCK_BROILER || sName === SHEET_NAMES.FLOCK_LAYER ||
-        sName === SHEET_NAMES.WEIGHING_BROILER || sName === SHEET_NAMES.WEIGHING_LAYER) {
+      sName === SHEET_NAMES.WEIGHING_BROILER || sName === SHEET_NAMES.WEIGHING_LAYER) {
       continue;
     }
 
@@ -391,7 +391,7 @@ function pisahkanSheetPedagingDanPetelur() {
     var sh2 = allSheets[s2];
     var s2Name = sh2.getName();
     if (s2Name === SHEET_NAMES.FLOCK_BROILER || s2Name === SHEET_NAMES.FLOCK_LAYER ||
-        s2Name === SHEET_NAMES.WEIGHING_BROILER || s2Name === SHEET_NAMES.WEIGHING_LAYER) {
+      s2Name === SHEET_NAMES.WEIGHING_BROILER || s2Name === SHEET_NAMES.WEIGHING_LAYER) {
       continue;
     }
 
@@ -554,15 +554,22 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  var lock = LockService.getScriptLock();
+  var contents = e && e.postData ? e.postData.contents : '{}';
+  var payload = JSON.parse(contents);
+  var action = payload.action;
+  var result = {};
+
+  // Hanya aksi penulisan data yang membutuhkan Lock agar aksi pembacaan data selalu instan & bebas antrian timeout
+  var isWriteAction = (action === 'createFlock' || action === 'deleteFlock' || action === 'upsertWeighing' || action === 'deleteWeighing' || action === 'separateSheets' || action === 'migrateSheets' || action === 'migrateHeaders');
+  var lock = null;
+  if (isWriteAction) {
+    lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(10000);
+    } catch (lockErr) {}
+  }
+
   try {
-    lock.waitLock(30000);
-
-    var contents = e && e.postData ? e.postData.contents : '{}';
-    var payload = JSON.parse(contents);
-    var action = payload.action;
-    var result = {};
-
     switch (action) {
       case 'ping':
         result = { success: true, message: 'Pong dari Google Sheets!' };
@@ -608,7 +615,9 @@ function doPost(e) {
       error: err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   } finally {
-    lock.releaseLock();
+    if (lock) {
+      try { lock.releaseLock(); } catch (e) {}
+    }
   }
 }
 
@@ -636,6 +645,13 @@ function handleGetAllFlocks() {
         allFlocks.push(f);
       }
     }
+  }
+
+  // Muat data penimbangan tiap flok sekaligus dalam 1 roundtrip
+  for (var j = 0; j < allFlocks.length; j++) {
+    var weighingsRes = handleGetWeighingsByFlock(allFlocks[j].id);
+    allFlocks[j].weighings = weighingsRes.data || [];
+    allFlocks[j].weighingsCount = allFlocks[j].weighings.length;
   }
 
   // Sort descending by created_at

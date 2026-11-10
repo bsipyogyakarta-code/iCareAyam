@@ -54,12 +54,53 @@ module.exports = {
   isConfigured,
   scriptUrl,
 
-  // 1. Ambil Semua Flok / Kandang
+  // 1. Ambil Semua Flok / Kandang (Sudah memuat seluruh penimbangan dalam 1 roundtrip cepat)
   async getAllFlocks() {
     const result = await callScript('getAllFlocks');
     const flocks = result.data || [];
     return flocks.map(f => {
       const fid = String(f.id || f.flock_id || f['ID Kandang'] || f['id kandang'] || f.code || '');
+      const rawWeighings = f.weighings || [];
+      const weighings = rawWeighings.map(r => {
+        let rawSamples = r.samples_json != null ? r.samples_json : r['Data Sampel (JSON)'];
+        let parsedSamples = [];
+        if (Array.isArray(rawSamples)) {
+          parsedSamples = rawSamples;
+        } else if (typeof rawSamples === 'string' && rawSamples) {
+          try {
+            parsedSamples = JSON.parse(rawSamples);
+          } catch (e) {
+            parsedSamples = [];
+          }
+        }
+        const ageDays = Number(r.age_days != null && r.age_days !== '' ? r.age_days : (r['Hari Ke- (Umur)'] != null && r['Hari Ke- (Umur)'] !== '' ? r['Hari Ke- (Umur)'] : (Number(r.week || r['Minggu Ke-'] || 0) * 7)));
+        const week = Number(r.week != null && r.week !== '' ? r.week : (r['Minggu Ke-'] != null && r['Minggu Ke-'] !== '' ? r['Minggu Ke-'] : Math.max(1, Math.ceil(ageDays / 7))));
+        return {
+          id: String(r.id || r['ID Catatan'] || ''),
+          flockId: String(r.flock_id || r['ID Kandang'] || fid),
+          week: week,
+          day: ageDays,
+          date: String(r.date || r['Tanggal Catat'] || ''),
+          ageDays: ageDays,
+          avgWeight: Number(r.avg_weight != null ? r.avg_weight : (r['Bobot Rata-rata (gram)'] || 0)),
+          targetWeight: Number(r.target_weight != null ? r.target_weight : (r['Target Bobot (gram)'] || 0)),
+          sampleCount: Number(r.sample_count != null ? r.sample_count : (r['Jumlah Sampel (ekor)'] || 0)),
+          samples: parsedSamples,
+          uniformity: Number(r.uniformity != null ? r.uniformity : (r['Keseragaman (%)'] || 0)),
+          feedIntakeKg: Number(r.feed_intake_kg != null ? r.feed_intake_kg : (r['Pakan Harian (kg)'] || 0)),
+          mortality: Number(r.mortality != null ? r.mortality : (r['Kematian (ekor)'] || 0)),
+          cull: Number(r.cull != null ? r.cull : (r['Afkir (ekor)'] || 0)),
+          populationAdded: Number(r.population_added != null ? r.population_added : (r['Ayam Masuk (ekor)'] || 0)),
+          populationDecreased: Number(r.population_decreased != null ? r.population_decreased : (r['Ayam Berkurang (ekor)'] || 0)),
+          populationShipped: Number(r.population_shipped != null ? r.population_shipped : (r['Ayam Dipanen/Keluar (ekor)'] || 0)),
+          eggCount: Number(r.egg_count != null ? r.egg_count : (r['Produksi Telur (butir)'] || 0)),
+          eggWeightKg: Number(r.egg_weight_kg != null ? r.egg_weight_kg : (r['Bobot Telur (kg)'] || 0)),
+          healthNote: String(r.health_note != null ? r.health_note : (r['Catatan Kesehatan'] || '')),
+          photoUrl: String(r.photo_url != null ? r.photo_url : (r['Foto Dokumentasi'] || '')),
+          createdAt: String(r.created_at != null ? r.created_at : (r['Waktu Input'] || ''))
+        };
+      });
+
       return {
         id: fid,
         name: f.name || f['Nama Kandang'] || '',
@@ -73,7 +114,9 @@ module.exports = {
         location: f.location || f['Lokasi Kandang'] || '',
         officer: f.officer || f['Petugas/PIC'] || '',
         notes: f.notes || f['Catatan Kandang'] || '',
-        created_at: f.created_at || f['Waktu Dibuat'] || new Date().toISOString()
+        created_at: f.created_at || f['Waktu Dibuat'] || new Date().toISOString(),
+        weighingsCount: weighings.length,
+        weighings: weighings
       };
     });
   },

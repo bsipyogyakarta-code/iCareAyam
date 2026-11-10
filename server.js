@@ -132,8 +132,8 @@ app.get('/api/flocks', async (req, res) => {
   try {
     if (cloudAdapter) {
       const flocks = await cloudAdapter.getAllFlocks();
-      const result = await Promise.all(flocks.map(async f => {
-        const weighings = await cloudAdapter.getWeighingsByFlock(f.id);
+      const result = flocks.map(f => {
+        const weighings = f.weighings || [];
         return {
           id: f.id,
           name: f.name,
@@ -151,7 +151,7 @@ app.get('/api/flocks', async (req, res) => {
           weighingsCount: weighings.length,
           weighings: weighings
         };
-      }));
+      });
       return res.json({ success: true, cloud: true, provider: providerName, data: result });
     }
 
