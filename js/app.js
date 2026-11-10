@@ -6,7 +6,7 @@
 let allFlocks = [];
 let currentActiveFlock = null;
 let currentStandard = null;
-let currentEditingWeek = null;
+let currentEditingRecordId = null;
 let activeProductionType = localStorage.getItem('BRMP_ACTIVE_PRODUCTION_TYPE') || 'broiler';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -209,14 +209,14 @@ function updateCategoryIntro() {
   document.getElementById('categoryStep').textContent = 'Jenis pemeliharaan';
   document.getElementById('categoryTitle').textContent = isLayer ? 'Ayam Petelur' : 'Ayam Pedaging';
   document.getElementById('categoryHelp').textContent = isLayer
-    ? 'Catat jumlah telur, berat telur, dan pakan setiap minggu.'
-    : 'Catat pakan, jumlah ayam, dan bobot setiap minggu.';
+    ? 'Catat jumlah telur, berat telur, dan pakan setiap hari.'
+    : 'Catat pakan, jumlah ayam, dan bobot setiap hari.';
   document.querySelector('#btnCategoryAdd span').textContent = isLayer
-    ? 'Catat Hasil Telur'
-    : 'Catat Minggu Ini';
+    ? 'Catat Telur Harian'
+    : 'Catat Hari Ini';
   document.getElementById('btnCategoryAdd').setAttribute('aria-label', isLayer
-    ? 'Catat hasil produksi telur minggu ini'
-    : 'Catat data ayam pedaging minggu ini');
+    ? 'Catat hasil produksi telur hari ini'
+    : 'Catat data ayam pedaging hari ini');
   document.getElementById('emptyStateTitle').textContent = isLayer
     ? 'Belum ada kandang ayam petelur'
     : 'Belum ada kandang ayam pedaging';
@@ -269,19 +269,21 @@ function renderKPIs() {
 
   setKpi(1, 'Jumlah ayam sekarang', formatNumber(population), 'ekor', 'Di kandang yang dipilih');
   if (activeProductionType === 'layer') {
-    setKpi(2, 'Jumlah telur minggu ini', latest ? formatNumber(latest.eggCount) : '-', 'butir',
-      latest ? `Minggu ke-${latest.week}` : 'Belum ada catatan produksi telur');
-    setKpi(3, 'Berat total telur minggu ini', latest ? formatNumber(latest.eggWeightKg) : '0', 'kg',
-      latest ? `Minggu ke-${latest.week}` : 'Belum ada catatan bobot telur');
-    setKpi(4, 'Pakan minggu ini', latest ? formatNumber(latest.feedIntakeKg) : '0', 'kg',
-      latest ? `Minggu ke-${latest.week}` : 'Belum ada catatan pemberian pakan');
+    const latestDay = latest ? Number(latest.day != null ? latest.day : (latest.ageDays || Number(latest.week || 0) * 7)) : 0;
+    setKpi(2, 'Jumlah telur hari ini', latest ? formatNumber(latest.eggCount) : '-', 'butir',
+      latest ? `${formatDateIndo(latest.date)} (Hari ${latestDay})` : 'Belum ada catatan produksi telur');
+    setKpi(3, 'Berat telur hari ini', latest ? formatNumber(latest.eggWeightKg) : '0', 'kg',
+      latest ? `${formatDateIndo(latest.date)} (Hari ${latestDay})` : 'Belum ada catatan bobot telur');
+    setKpi(4, 'Pakan hari ini', latest ? formatNumber(latest.feedIntakeKg) : '0', 'kg',
+      latest ? `Total pakan: ${formatNumber(totalFeed)} kg` : 'Belum ada catatan pemberian pakan');
     return;
   }
 
-  setKpi(2, 'Rata-rata bobot minggu ini', latest ? formatNumber(latest.avgWeight) : '-', 'gram/ekor',
-    latest ? `Data minggu ke-${latest.week}` : 'Belum ada catatan bobot mingguan');
-  setKpi(3, 'Pakan diberikan minggu ini', latest ? formatNumber(latest.feedIntakeKg) : '0', 'kg',
-    latest ? `Jumlah seluruh minggu: ${formatNumber(totalFeed)} kg` : 'Belum ada catatan pemberian pakan');
+  const latestDay = latest ? Number(latest.day != null ? latest.day : (latest.ageDays || Number(latest.week || 0) * 7)) : 0;
+  setKpi(2, 'Rata-rata bobot terakhir', latest ? formatNumber(latest.avgWeight) : '-', 'gram/ekor',
+    latest ? `${formatDateIndo(latest.date)} (Hari ke-${latestDay})` : 'Belum ada catatan bobot harian');
+  setKpi(3, 'Pakan harian terakhir', latest ? formatNumber(latest.feedIntakeKg) : '0', 'kg',
+    latest ? `Total pakan: ${formatNumber(totalFeed)} kg` : 'Belum ada catatan pemberian pakan');
   const mutations = records.reduce((totals, record) => ({
     added: totals.added + (Number(record.populationAdded) || 0),
     decreased: totals.decreased + (Number(record.populationDecreased) || 0)
@@ -289,7 +291,7 @@ function renderKPIs() {
   }), { added: 0, decreased: 0 });
   setKpi(4, 'Perubahan jumlah ayam', 
     `Tambah ${formatNumber(mutations.added)} • Kurang ${formatNumber(mutations.decreased)}`,
-    '', 'Jumlah seluruh minggu');
+    '', 'Total akumulasi perubahan');
 }
 
 function renderGrowthInsights(latest) {
@@ -300,14 +302,16 @@ function renderGrowthInsights(latest) {
     container.innerHTML = `
       <div class="insight-icon">🌱</div>
       <div class="insight-content">
-        <h3>Memulai Siklus Penimbangan Ayam BRMP</h3>
-        <p>Kandang ini belum memiliki catatan penimbangan mingguan. Klik tombol <strong>+ Input Timbangan</strong> untuk mencatat bobot ayam saat ini dan melampirkan foto dokumentasi.</p>
+        <h3>Memulai Siklus Pencatatan Harian Ayam</h3>
+        <p>Kandang ini belum memiliki catatan monitoring harian. Klik tombol <strong>+ Catat Hari Ini</strong> untuk mencatat bobot ayam dan data harian saat ini.</p>
       </div>
     `;
     return;
   }
 
-  const std = currentStandard?.weeklyStandards?.find(s => Number(s.week) === Number(latest.week));
+  const dayNum = Number(latest.day != null ? latest.day : (latest.ageDays || Number(latest.week || 0) * 7));
+  const weekApprox = Math.round(dayNum / 7);
+  const std = currentStandard?.weeklyStandards?.find(s => Number(s.week) === weekApprox);
   const targetW = std ? std.standardWeight : latest.avgWeight;
   const diffPct = ((latest.avgWeight - targetW) / targetW) * 100;
   const uniformity = latest.uniformity || 90;
@@ -319,15 +323,15 @@ function renderGrowthInsights(latest) {
   if (diffPct >= 5) {
     icon = '🚀';
     title = `Perkembangan Sangat Bagus (+${diffPct.toFixed(1)}% di atas acuan standar)`;
-    desc = `Ayam pada flok ini tumbuh melampaui kurva acuan standar BRMP. Pertahankan formulasi nutrisi dan pastikan ventilasi kandang tetap sejuk agar laju tumbuh tetap optimal.`;
+    desc = `Ayam pada flok ini tumbuh melampaui kurva acuan standar. Pertahankan formulasi nutrisi dan pastikan ventilasi kandang tetap sejuk agar laju tumbuh tetap optimal.`;
   } else if (diffPct >= -4) {
     icon = '✅';
     title = `Pertumbuhan Sesuai Target Standar (${diffPct.toFixed(1)}%)`;
-    desc = `Rata-rata bobot ayam berada dalam rentang ideal umur ${latest.ageDays || latest.week * 7} hari. Lanjutkan penimbangan rutin seminggu sekali untuk pemantauan berkelanjutan.`;
+    desc = `Rata-rata bobot ayam berada dalam rentang ideal umur ${dayNum} hari. Lanjutkan pemantauan rutin untuk kontrol performa ayam.`;
   } else {
     icon = '⚠️';
     title = `Bobot Tertinggal (${diffPct.toFixed(1)}%) - Perlu Penanganan`;
-    desc = `Bobot ayam berada di bawah acuan standar BRMP. Saran: (1) Pastikan kecukupan tempat pakan dan minum, (2) Lakukan grading (pisahkan ayam kecil agar tidak kalah bersaing), (3) Berikan vitamin dan probiotik tambahan.`;
+    desc = `Bobot ayam berada di bawah acuan standar. Saran: (1) Pastikan kecukupan tempat pakan dan minum, (2) Lakukan grading jika perlu, (3) Berikan vitamin dan probiotik tambahan.`;
   }
 
   if (uniformity < 80) {
@@ -350,19 +354,19 @@ function renderWeighingsTable() {
   const weighings = currentActiveFlock?.weighings || [];
   const isLayer = activeProductionType === 'layer';
   document.getElementById('monitoringTableTitle').textContent = isLayer
-    ? 'Rekapitulasi Produksi Ayam Petelur'
-    : 'Rekapitulasi Monitoring Ayam Pedaging';
+    ? 'Rekapitulasi Produksi Harian Telur'
+    : 'Rekapitulasi Monitoring Harian Ayam Pedaging';
   document.getElementById('monitoringTableHead').innerHTML = `<tr>${
     (isLayer
-      ? ['Minggu', 'Tanggal', 'Populasi', 'Jumlah Telur', 'Bobot Telur', 'Pakan', 'Mutasi', 'Dokumentasi', 'Aksi']
-      : ['Minggu', 'Tanggal', 'Bobot Rata-rata', 'Pakan', 'Bertambah', 'Berkurang', 'Dokumentasi', 'Aksi']
+      ? ['Hari ke-', 'Tanggal', 'Populasi', 'Jumlah Telur', 'Bobot Telur', 'Pakan Harian', 'Mutasi', 'Dokumentasi', 'Aksi']
+      : ['Hari ke-', 'Tanggal', 'Bobot Rata-rata', 'Pakan Harian', 'Bertambah', 'Berkurang', 'Dokumentasi', 'Aksi']
     ).map(title => `<th>${title}</th>`).join('')
   }</tr>`;
   if (weighings.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="${isLayer ? 9 : 8}" style="text-align:center; padding: 2.5rem; color: var(--text-muted);">
-          Belum ada catatan minggu ini. Klik <strong>+ Input Monitoring</strong> untuk menambahkan data.
+          Belum ada catatan harian. Klik <strong>+ Catat Hari Ini</strong> untuk menambahkan data.
         </td>
       </tr>
     `;
@@ -370,9 +374,10 @@ function renderWeighingsTable() {
   }
 
   tbody.innerHTML = weighings.map((w, index) => {
+    const dayNum = Number(w.day != null ? w.day : (w.ageDays != null ? w.ageDays : Number(w.week || 0) * 7));
     const photoCell = w.photoUrl ? `
-      <button type="button" class="doc-thumbnail-btn" onclick="openPhotoViewer('${w.photoUrl}', 'Dokumentasi Minggu ${w.week}', '${w.healthNote || ''}', '${formatDateIndo(w.date)}', '${isLayer ? `Telur: ${w.eggCount || 0} butir / ${w.eggWeightKg || 0} kg` : `Bobot: ${w.avgWeight} g`}')" title="Lihat Foto Dokumentasi">
-        <img src="${w.photoUrl}" alt="Foto minggu ${w.week}">
+      <button type="button" class="doc-thumbnail-btn" onclick="openPhotoViewer('${w.photoUrl}', 'Dokumentasi Hari ${dayNum}', '${w.healthNote || ''}', '${formatDateIndo(w.date)}', '${isLayer ? `Telur: ${w.eggCount || 0} butir / ${w.eggWeightKg || 0} kg` : `Bobot: ${w.avgWeight} g`}')" title="Lihat Foto Dokumentasi">
+        <img src="${w.photoUrl}" alt="Foto hari ${dayNum}">
       </button>
     ` : `
       <span class="doc-placeholder-icon" title="Belum ada foto dokumentasi">
@@ -381,8 +386,8 @@ function renderWeighingsTable() {
     `;
     const decreased = (Number(w.populationDecreased) || 0) + (Number(w.mortality) || 0) + (Number(w.cull) || 0);
     const movement = `+${Number(w.populationAdded) || 0} / -${decreased}`;
-    const recordLabel = w.week === 0 && !isLayer ? 'DOC (M0)' : `Minggu ${w.week}`;
-    const weekPopulation = weighings.slice(0, index + 1).reduce((population, record) => population
+    const recordLabel = dayNum === 0 && !isLayer ? 'DOC (H0)' : `Hari ${dayNum}`;
+    const dayPopulation = weighings.slice(0, index + 1).reduce((population, record) => population
       + (Number(record.populationAdded) || 0)
       - (Number(record.populationDecreased) || 0)
       - (Number(record.populationShipped) || 0)
@@ -390,12 +395,14 @@ function renderWeighingsTable() {
       - (Number(record.cull) || 0),
     Number(currentActiveFlock.initialPop) || 0);
 
+    const recordIdentifier = w.id || dayNum;
+
     return `
       <tr>
         <td><strong>${recordLabel}</strong></td>
         <td>${formatDateIndo(w.date)}</td>
         ${isLayer ? `
-          <td>${Math.max(0, weekPopulation).toLocaleString('id-ID')} ekor</td>
+          <td>${Math.max(0, dayPopulation).toLocaleString('id-ID')} ekor</td>
           <td>${Number(w.eggCount || 0).toLocaleString('id-ID')} butir</td>
           <td>${Number(w.eggWeightKg || 0).toLocaleString('id-ID')} kg</td>
           <td>${Number(w.feedIntakeKg || 0).toLocaleString('id-ID')} kg</td>
@@ -409,10 +416,10 @@ function renderWeighingsTable() {
         <td style="text-align:center;">${photoCell}</td>
         <td>
           <div class="table-action-btns">
-            <button class="btn btn-icon btn-sm" title="Edit data" onclick="openEditWeighingModal(${w.week})">
+            <button class="btn btn-icon btn-sm" title="Edit data" onclick="openEditWeighingModal('${recordIdentifier}')">
               <i class="fa-solid fa-pen-to-square"></i>
             </button>
-            <button class="btn btn-icon btn-sm" title="Hapus data" onclick="deleteWeighingData(${w.week})" style="color: var(--rose-500);">
+            <button class="btn btn-icon btn-sm" title="Hapus data" onclick="deleteWeighingData('${recordIdentifier}', ${dayNum})" style="color: var(--rose-500);">
               <i class="fa-solid fa-trash-can"></i>
             </button>
           </div>
@@ -503,6 +510,21 @@ function setupEventListeners() {
   document.getElementById('formBroilerMonitoring').addEventListener('submit', handleSaveBroiler);
   document.getElementById('formLayerProduction').addEventListener('submit', handleSaveLayer);
 
+  ['broiler', 'layer'].forEach(prefix => {
+    const dateInput = document.getElementById(`${prefix}Date`);
+    if (dateInput) {
+      dateInput.addEventListener('change', (e) => {
+        const selectedDate = e.target.value;
+        if (selectedDate && currentActiveFlock?.docDate && currentEditingRecordId == null) {
+          const diff = Math.round((new Date(`${selectedDate}T00:00:00`) - new Date(`${currentActiveFlock.docDate}T00:00:00`)) / 86400000);
+          if (diff >= 0) {
+            document.getElementById(`${prefix}Day`).value = diff;
+          }
+        }
+      });
+    }
+  });
+
   const formFlock = document.getElementById('formNewFlock');
   if (formFlock) formFlock.addEventListener('submit', handleSaveNewFlock);
 }
@@ -533,26 +555,41 @@ function openAddWeighingModal() {
     return;
   }
 
-  currentEditingWeek = null;
+  currentEditingRecordId = null;
   const records = currentActiveFlock.weighings || [];
-  const nextWeek = records.length ? Math.max(...records.map(record => Number(record.week) || 0)) + 1 : 1;
   const isLayer = activeProductionType === 'layer';
   const form = document.getElementById(isLayer ? 'formLayerProduction' : 'formBroilerMonitoring');
   form.reset();
 
   const prefix = isLayer ? 'layer' : 'broiler';
-  document.getElementById(`${prefix}Week`).value = nextWeek;
-  document.getElementById(`${prefix}Week`).disabled = false;
-  document.getElementById(`${prefix}Date`).value = getTodayInputDate();
+  const todayStr = getTodayInputDate();
+  document.getElementById(`${prefix}Date`).value = todayStr;
+
+  // Hitung perkiraan hari ke- (umur hari) berdasarkan tanggal DOC
+  let nextDay = 1;
+  if (currentActiveFlock.docDate) {
+    const diff = Math.round((new Date(`${todayStr}T00:00:00`) - new Date(`${currentActiveFlock.docDate}T00:00:00`)) / 86400000);
+    if (diff >= 0) nextDay = diff;
+  }
+  if (records.length > 0) {
+    const maxDay = Math.max(...records.map(r => Number(r.day != null ? r.day : (r.ageDays || Number(r.week || 0) * 7))));
+    if (nextDay <= maxDay) {
+      nextDay = maxDay + 1;
+    }
+  }
+
+  document.getElementById(`${prefix}Day`).value = nextDay;
+  document.getElementById(`${prefix}Day`).disabled = false;
 
   if (isLayer) {
-    document.getElementById('layerFormTitle').textContent = 'Catat Produksi Telur';
+    document.getElementById('layerFormTitle').textContent = 'Catat Produksi Harian Telur';
     document.getElementById('layerAdded').value = 0;
     document.getElementById('layerDecreased').value = 0;
   } else {
-    const standard = currentStandard?.weeklyStandards?.find(item => Number(item.week) === nextWeek);
+    const weekApprox = Math.round(nextDay / 7);
+    const standard = currentStandard?.weeklyStandards?.find(item => Number(item.week) === weekApprox);
     document.getElementById('broilerWeight').value = standard?.standardWeight || '';
-    document.getElementById('broilerFormTitle').textContent = 'Catat Ayam Pedaging';
+    document.getElementById('broilerFormTitle').textContent = 'Catat Harian Ayam Pedaging';
     document.getElementById('broilerAdded').value = 0;
     document.getElementById('broilerDecreased').value = 0;
   }
@@ -560,18 +597,24 @@ function openAddWeighingModal() {
   document.getElementById(isLayer ? 'modalLayerProduction' : 'modalBroilerMonitoring').classList.add('active');
 }
 
-function openEditWeighingModal(weekNumber) {
-  const record = (currentActiveFlock?.weighings || [])
-    .find(item => Number(item.week) === Number(weekNumber));
+function openEditWeighingModal(identifier) {
+  const record = (currentActiveFlock?.weighings || []).find(item =>
+    String(item.id) === String(identifier) ||
+    String(item.day) === String(identifier) ||
+    String(item.ageDays) === String(identifier) ||
+    String(item.week) === String(identifier)
+  );
   if (!record) return;
 
-  currentEditingWeek = weekNumber;
+  currentEditingRecordId = record.id || identifier;
   const isLayer = activeProductionType === 'layer';
   const prefix = isLayer ? 'layer' : 'broiler';
   const form = document.getElementById(isLayer ? 'formLayerProduction' : 'formBroilerMonitoring');
   form.reset();
-  document.getElementById(`${prefix}Week`).value = record.week;
-  document.getElementById(`${prefix}Week`).disabled = true;
+
+  const dayNum = Number(record.day != null ? record.day : (record.ageDays != null ? record.ageDays : Number(record.week || 0) * 7));
+  document.getElementById(`${prefix}Day`).value = dayNum;
+  document.getElementById(`${prefix}Day`).disabled = true;
   document.getElementById(`${prefix}Date`).value = record.date;
   document.getElementById(`${prefix}Notes`).value = record.healthNote || '';
 
@@ -582,7 +625,7 @@ function openEditWeighingModal(weekNumber) {
     document.getElementById('layerAdded').value = record.populationAdded || 0;
     document.getElementById('layerDecreased').value = (record.populationDecreased || 0)
       + (record.mortality || 0) + (record.cull || 0);
-    document.getElementById('layerFormTitle').textContent = `Ubah Catatan Minggu ke-${weekNumber}`;
+    document.getElementById('layerFormTitle').textContent = `Ubah Catatan Hari ke-${dayNum}`;
     document.getElementById('modalLayerProduction').classList.add('active');
     return;
   }
@@ -592,21 +635,21 @@ function openEditWeighingModal(weekNumber) {
   document.getElementById('broilerAdded').value = record.populationAdded || 0;
   document.getElementById('broilerDecreased').value = (record.populationDecreased || 0)
     + (record.mortality || 0) + (record.cull || 0);
-  document.getElementById('broilerFormTitle').textContent = `Ubah Catatan Minggu ke-${weekNumber}`;
+  document.getElementById('broilerFormTitle').textContent = `Ubah Catatan Hari ke-${dayNum}`;
   document.getElementById('modalBroilerMonitoring').classList.add('active');
 }
 
 function handleSaveBroiler(event) {
   event.preventDefault();
-  return saveWeeklyRecord('broiler');
+  return saveDailyRecord('broiler');
 }
 
 function handleSaveLayer(event) {
   event.preventDefault();
-  return saveWeeklyRecord('layer');
+  return saveDailyRecord('layer');
 }
 
-async function saveWeeklyRecord(type) {
+async function saveDailyRecord(type) {
   if (!currentActiveFlock || getProductionType(currentActiveFlock) !== type) {
     showToast('Pilih kandang dengan jenis ayam yang sesuai terlebih dahulu.', 'error');
     return;
@@ -614,9 +657,9 @@ async function saveWeeklyRecord(type) {
 
   const isLayer = type === 'layer';
   const prefix = isLayer ? 'layer' : 'broiler';
-  const form = document.getElementById(isLayer ? 'formLayerProduction' : 'formBroilerMonitoring');
-  const week = Number(document.getElementById(`${prefix}Week`).value);
+  const day = Number(document.getElementById(`${prefix}Day`).value);
   const date = document.getElementById(`${prefix}Date`).value;
+  const week = Math.max(1, Math.ceil(day / 7));
   const avgWeight = isLayer ? 0 : Number(document.getElementById('broilerWeight').value);
   const feedIntakeKg = Number(document.getElementById(isLayer ? 'layerFeed' : 'broilerFeed').value);
   const populationAdded = isLayer
@@ -625,14 +668,25 @@ async function saveWeeklyRecord(type) {
   const populationDecreased = isLayer
     ? Number(document.getElementById('layerDecreased')?.value || 0)
     : Number(document.getElementById('broilerDecreased')?.value || 0);
-  const originalRecord = currentEditingWeek == null
+  const originalRecord = currentEditingRecordId == null
     ? null
-    : (currentActiveFlock.weighings || []).find(item => Number(item.week) === Number(currentEditingWeek));
-  const standard = currentStandard?.weeklyStandards?.find(item => Number(item.week) === week);
+    : (currentActiveFlock.weighings || []).find(item =>
+        String(item.id) === String(currentEditingRecordId) ||
+        String(item.day) === String(currentEditingRecordId) ||
+        String(item.ageDays) === String(currentEditingRecordId) ||
+        String(item.week) === String(currentEditingRecordId)
+      );
+
+  const weekApprox = Math.round(day / 7);
+  const standard = currentStandard?.weeklyStandards?.find(item => Number(item.week) === weekApprox);
   const formData = new FormData();
+  if (originalRecord?.id) {
+    formData.append('id', originalRecord.id);
+  }
+  formData.append('day', day);
   formData.append('week', week);
   formData.append('date', date);
-  formData.append('ageDays', Math.max(0, Math.round((new Date(`${date}T00:00:00`) - new Date(`${currentActiveFlock.docDate}T00:00:00`)) / 86400000)));
+  formData.append('ageDays', day);
   formData.append('avgWeight', avgWeight);
   formData.append('targetWeight', standard?.standardWeight || avgWeight);
   formData.append('sampleCount', originalRecord?.sampleCount || (isLayer ? 0 : 30));
@@ -652,23 +706,23 @@ async function saveWeeklyRecord(type) {
   try {
     await window.apiClient.saveWeighing(currentActiveFlock.id, formData);
     document.getElementById(isLayer ? 'modalLayerProduction' : 'modalBroilerMonitoring').classList.remove('active');
-    currentEditingWeek = null;
-    showToast(`Catatan minggu ke-${week} berhasil disimpan.`, 'success');
+    currentEditingRecordId = null;
+    showToast(`Catatan hari ke-${day} berhasil disimpan.`, 'success');
     await loadDataFromBackend();
   } catch (error) {
     showToast(`Catatan belum berhasil disimpan: ${error.message}`, 'error');
   }
 }
 
-async function deleteWeighingData(week) {
-  if (confirm(`Hapus catatan minggu ke-${week}? Catatan yang dihapus tidak dapat dikembalikan.`)) {
-    try {
-      await window.apiClient.deleteWeighing(currentActiveFlock.id, week);
-      showToast(`Catatan minggu ke-${week} telah dihapus.`, 'success');
-      await loadDataFromBackend();
-    } catch (err) {
-      showToast('Gagal menghapus data: ' + err.message, 'error');
-    }
+async function deleteWeighingData(identifier, dayNumber) {
+  const displayDay = dayNumber != null ? dayNumber : identifier;
+  if (!confirm(`Hapus catatan hari ke-${displayDay}? Catatan yang dihapus tidak dapat dikembalikan.`)) return;
+  try {
+    await window.apiClient.deleteWeighing(currentActiveFlock.id, identifier);
+    showToast(`Catatan hari ke-${displayDay} telah dihapus.`, 'success');
+    await loadDataFromBackend();
+  } catch (err) {
+    showToast('Gagal menghapus data: ' + err.message, 'error');
   }
 }
 
@@ -821,15 +875,16 @@ function exportToCsv() {
     ['Petugas PIC', currentActiveFlock.officer || '-'],
     [''],
     isLayer
-      ? ['Minggu', 'Tanggal', 'Populasi', 'Jumlah Telur (butir)', 'Bobot Telur (kg)', 'Pakan (kg)', 'Bertambah (ekor)', 'Berkurang (ekor)', 'Catatan']
-      : ['Minggu', 'Tanggal', 'Bobot Rata-rata (gram)', 'Pakan (kg)', 'Bertambah (ekor)', 'Berkurang (ekor)', 'Catatan']
+      ? ['Hari ke-', 'Tanggal', 'Populasi', 'Jumlah Telur (butir)', 'Bobot Telur (kg)', 'Pakan Harian (kg)', 'Bertambah (ekor)', 'Berkurang (ekor)', 'Catatan']
+      : ['Hari ke-', 'Tanggal', 'Bobot Rata-rata (gram)', 'Pakan Harian (kg)', 'Bertambah (ekor)', 'Berkurang (ekor)', 'Catatan']
   ];
 
   const csvEscape = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
   weighings.forEach((w, index) => {
+    const dayNum = Number(w.day != null ? w.day : (w.ageDays != null ? w.ageDays : Number(w.week || 0) * 7));
     const decreased = (Number(w.populationDecreased) || 0) + (Number(w.mortality) || 0) + (Number(w.cull) || 0);
     const common = [
-      w.week === 0 && !isLayer ? 'DOC (M0)' : `Minggu ${w.week}`,
+      dayNum === 0 && !isLayer ? 'DOC (H0)' : `Hari ${dayNum}`,
       w.date,
       Number(w.feedIntakeKg) || 0
     ];

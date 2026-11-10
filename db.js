@@ -57,7 +57,7 @@ function initSqliteTables() {
     CREATE TABLE IF NOT EXISTS weighings (
       id TEXT PRIMARY KEY,
       flock_id TEXT NOT NULL,
-      week INTEGER NOT NULL,
+      week INTEGER NOT NULL DEFAULT 1,
       date TEXT NOT NULL,
       age_days INTEGER NOT NULL,
       avg_weight REAL NOT NULL,
@@ -76,8 +76,7 @@ function initSqliteTables() {
       health_note TEXT DEFAULT '',
       photo_url TEXT DEFAULT '',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (flock_id) REFERENCES flocks (id) ON DELETE CASCADE,
-      UNIQUE (flock_id, week)
+      FOREIGN KEY (flock_id) REFERENCES flocks (id) ON DELETE CASCADE
     );
   `);
 
@@ -235,12 +234,13 @@ module.exports = {
 
   getWeighingsByFlock(flockId) {
     if (useSqlite && db) {
-      const stmt = db.prepare('SELECT * FROM weighings WHERE flock_id = ? ORDER BY week ASC');
+      const stmt = db.prepare('SELECT * FROM weighings WHERE flock_id = ? ORDER BY date ASC, age_days ASC, week ASC');
       const rows = stmt.all(flockId);
       return rows.map(r => ({
         id: r.id,
         flockId: r.flock_id,
         week: r.week,
+        day: r.age_days,
         date: r.date,
         ageDays: r.age_days,
         avgWeight: r.avg_weight,
@@ -265,11 +265,12 @@ module.exports = {
     const store = readJsonStore();
     return store.weighings
       .filter(w => w.flock_id === flockId)
-      .sort((a, b) => a.week - b.week)
+      .sort((a, b) => (a.age_days || a.week * 7) - (b.age_days || b.week * 7))
       .map(r => ({
         id: r.id,
         flockId: r.flock_id,
         week: r.week,
+        day: r.age_days,
         date: r.date,
         ageDays: r.age_days,
         avgWeight: r.avg_weight,
@@ -292,17 +293,30 @@ module.exports = {
   },
 
   upsertWeighing(weighing) {
-    const id = weighing.id || `w-${weighing.flockId}-${weighing.week}`;
+    const ageDays = Number(weighing.ageDays != null ? weighing.ageDays : (weighing.day != null ? weighing.day : Number(weighing.week || 1) * 7));
+    const week = Number(weighing.week || Math.max(1, Math.ceil(ageDays / 7)));
+    const id = weighing.id || `w-${weighing.flockId}-d${ageDays}-${weighing.date || 'rec'}`;
     
     if (useSqlite && db) {
+      // Cari apakah sudah ada data untuk tanggal atau hari ini pada flok yang bersangkutan
+      let recordId = id;
+      try {
+        const existing = db.prepare('SELECT id FROM weighings WHERE flock_id = ? AND (id = ? OR date = ? OR (age_days = ? AND age_days > 0)) LIMIT 1')
+          .get(weighing.flockId, id, weighing.date || '', ageDays);
+        if (existing && existing.id) {
+          recordId = existing.id;
+        }
+      } catch (e) {}
+
       const stmt = db.prepare(`
         INSERT INTO weighings (
           id, flock_id, week, date, age_days, avg_weight, target_weight,
           sample_count, samples_json, uniformity, feed_intake_kg, mortality, cull,
           population_added, population_decreased, population_shipped, egg_count, egg_weight_kg, health_note, photo_url
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(flock_id, week) DO UPDATE SET
+        ON CONFLICT(id) DO UPDATE SET
           date = excluded.date,
+          week = excluded.week,
           age_days = excluded.age_days,
           avg_weight = excluded.avg_weight,
           target_weight = excluded.target_weight,
@@ -322,13 +336,13 @@ module.exports = {
       `);
 
       stmt.run(
-        id,
+        recordId,
         weighing.flockId,
-        Number(weighing.week),
+        week,
         weighing.date,
-        Number(weighing.ageDays),
-        Number(weighing.avgWeight),
-        Number(weighing.targetWeight),
+        ageDays,
+        Number(weighing.avgWeight || 0),
+        Number(weighing.targetWeight || weighing.avgWeight || 0),
         Number(weighing.sampleCount || 0),
         JSON.stringify(weighing.samples || []),
         Number(weighing.uniformity || 0),
@@ -345,19 +359,25 @@ module.exports = {
       );
 
       this.updateFlockCurrentPop(weighing.flockId);
-      return id;
+      return recordId;
     }
 
     const store = readJsonStore();
-    const existingIndex = store.weighings.findIndex(w => w.flock_id === weighing.flockId && w.week === Number(weighing.week));
+    const existingIndex = store.weighings.findIndex(w =>
+      w.flock_id === weighing.flockId && (
+        w.id === id ||
+        (weighing.date && w.date === weighing.date) ||
+        (Number(w.age_days) === ageDays && ageDays > 0)
+      )
+    );
     const entry = {
-      id,
+      id: existingIndex >= 0 ? store.weighings[existingIndex].id : id,
       flock_id: weighing.flockId,
-      week: Number(weighing.week),
+      week: week,
       date: weighing.date,
-      age_days: Number(weighing.ageDays),
-      avg_weight: Number(weighing.avgWeight),
-      target_weight: Number(weighing.targetWeight),
+      age_days: ageDays,
+      avg_weight: Number(weighing.avgWeight || 0),
+      target_weight: Number(weighing.targetWeight || weighing.avgWeight || 0),
       sample_count: Number(weighing.sampleCount || 0),
       samples: weighing.samples || [],
       uniformity: Number(weighing.uniformity || 0),
@@ -382,19 +402,26 @@ module.exports = {
 
     writeJsonStore(store);
     this.updateFlockCurrentPop(weighing.flockId);
-    return id;
+    return entry.id;
   },
 
-  deleteWeighing(flockId, week) {
+  deleteWeighing(flockId, key) {
     if (useSqlite && db) {
-      const stmt = db.prepare('DELETE FROM weighings WHERE flock_id = ? AND week = ?');
-      stmt.run(flockId, Number(week));
+      const stmt = db.prepare('DELETE FROM weighings WHERE flock_id = ? AND (id = ? OR date = ? OR age_days = ? OR week = ?)');
+      stmt.run(flockId, String(key), String(key), Number(key) || -1, Number(key) || -1);
       this.updateFlockCurrentPop(flockId);
       return;
     }
 
     const store = readJsonStore();
-    store.weighings = store.weighings.filter(w => !(w.flock_id === flockId && w.week === Number(week)));
+    store.weighings = store.weighings.filter(w =>
+      !(w.flock_id === flockId && (
+        w.id === String(key) ||
+        w.date === String(key) ||
+        Number(w.age_days) === Number(key) ||
+        Number(w.week) === Number(key)
+      ))
+    );
     writeJsonStore(store);
     this.updateFlockCurrentPop(flockId);
   }

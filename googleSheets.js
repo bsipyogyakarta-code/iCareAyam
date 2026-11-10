@@ -141,7 +141,8 @@ module.exports = {
       return {
         id: String(r.id),
         flockId: String(r.flock_id),
-        week: Number(r.week),
+        week: Number(r.week || Math.max(1, Math.ceil(Number(r.age_days || 0) / 7))),
+        day: Number(r.age_days || 0),
         date: String(r.date || ''),
         ageDays: Number(r.age_days || 0),
         avgWeight: Number(r.avg_weight || 0),
@@ -164,17 +165,19 @@ module.exports = {
     });
   },
 
-  // 6. Simpan / Update Penimbangan Mingguan
+  // 6. Simpan / Update Penimbangan Harian
   async upsertWeighing(weighing) {
-    const id = weighing.id || `w-${weighing.flockId}-${weighing.week}`;
+    const ageDays = Number(weighing.ageDays != null ? weighing.ageDays : (weighing.day != null ? weighing.day : Number(weighing.week || 1) * 7));
+    const week = Number(weighing.week || Math.max(1, Math.ceil(ageDays / 7)));
+    const id = weighing.id || `w-${weighing.flockId}-d${ageDays}-${weighing.date || 'rec'}`;
     const record = {
       id,
       flock_id: weighing.flockId,
-      week: Number(weighing.week),
+      week: week,
       date: weighing.date,
-      age_days: Number(weighing.ageDays),
-      avg_weight: Number(weighing.avgWeight),
-      target_weight: Number(weighing.targetWeight),
+      age_days: ageDays,
+      avg_weight: Number(weighing.avgWeight || 0),
+      target_weight: Number(weighing.targetWeight || weighing.avgWeight || 0),
       sample_count: Number(weighing.sampleCount || 0),
       samples_json: weighing.samples || [],
       uniformity: Number(weighing.uniformity || 0),
@@ -183,7 +186,7 @@ module.exports = {
       cull: Number(weighing.cull || 0),
       population_added: Number(weighing.populationAdded || 0),
       population_decreased: Number(weighing.populationDecreased || 0),
-      population_shipped: Number(weighing.populationShipped || 0),
+      populationShipped: Number(weighing.populationShipped || 0),
       egg_count: Number(weighing.eggCount || 0),
       egg_weight_kg: Number(weighing.eggWeightKg || 0),
       health_note: weighing.healthNote || '',
@@ -193,9 +196,13 @@ module.exports = {
     return result.id || id;
   },
 
-  // 7. Hapus Penimbangan Mingguan
-  async deleteWeighing(flockId, week) {
-    const result = await callScript('deleteWeighing', { flockId: String(flockId), week: Number(week) });
+  // 7. Hapus Penimbangan
+  async deleteWeighing(flockId, key) {
+    const result = await callScript('deleteWeighing', {
+      flockId: String(flockId),
+      key: String(key),
+      week: Number(key) || 0
+    });
     return result.success;
   },
 

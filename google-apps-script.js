@@ -124,7 +124,7 @@ function doPost(e) {
         result = handleUpsertWeighing(payload.weighing);
         break;
       case 'deleteWeighing':
-        result = handleDeleteWeighing(payload.flockId, payload.week);
+        result = handleDeleteWeighing(payload.flockId, payload.key != null ? payload.key : payload.week);
         break;
       case 'uploadPhoto':
         result = handleUploadPhoto(payload);
@@ -243,9 +243,11 @@ function handleGetWeighingsByFlock(flockId) {
       filtered.push(rows[i]);
     }
   }
-  // Sort ascending by week
+  // Sort ascending by age_days or week
   filtered.sort(function(a, b) {
-    return Number(a.week || 0) - Number(b.week || 0);
+    var dayA = Number(a.age_days != null && a.age_days !== '' ? a.age_days : (Number(a.week || 0) * 7));
+    var dayB = Number(b.age_days != null && b.age_days !== '' ? b.age_days : (Number(b.week || 0) * 7));
+    return dayA - dayB;
   });
   return { success: true, data: filtered };
 }
@@ -253,12 +255,16 @@ function handleGetWeighingsByFlock(flockId) {
 function handleUpsertWeighing(weighing) {
   var sheetWeighings = getOrCreateSheet('Weighings', WEIGHING_HEADERS);
   var rowsW = getSheetObjects(sheetWeighings);
-  var id = weighing.id || ('w-' + weighing.flock_id + '-' + weighing.week);
+  var ageDays = Number(weighing.age_days != null ? weighing.age_days : (Number(weighing.week || 1) * 7));
+  var week = Number(weighing.week || Math.max(1, Math.ceil(ageDays / 7)));
+  var id = weighing.id || ('w-' + weighing.flock_id + '-d' + ageDays + '-' + (weighing.date || 'rec'));
   var existingRowIndex = -1;
 
   for (var i = 0; i < rowsW.length; i++) {
     if (String(rowsW[i].flock_id) === String(weighing.flock_id) &&
-        Number(rowsW[i].week) === Number(weighing.week)) {
+        (String(rowsW[i].id) === String(id) ||
+         String(rowsW[i].date) === String(weighing.date) ||
+         (Number(rowsW[i].age_days) === ageDays && ageDays > 0))) {
       existingRowIndex = rowsW[i]._rowIndex;
       if (rowsW[i].photo_url && !weighing.photo_url) {
         weighing.photo_url = rowsW[i].photo_url;
@@ -274,9 +280,9 @@ function handleUpsertWeighing(weighing) {
   var rowData = [
     id,
     weighing.flock_id,
-    Number(weighing.week),
+    week,
     weighing.date || '',
-    Number(weighing.age_days || Number(weighing.week) * 7),
+    ageDays,
     Number(weighing.avg_weight || 0),
     Number(weighing.target_weight || weighing.avg_weight || 0),
     Number(weighing.sample_count || 0),
@@ -305,12 +311,15 @@ function handleUpsertWeighing(weighing) {
   return { success: true, id: id };
 }
 
-function handleDeleteWeighing(flockId, week) {
+function handleDeleteWeighing(flockId, key) {
   var sheetWeighings = getOrCreateSheet('Weighings', WEIGHING_HEADERS);
   var rowsW = getSheetObjects(sheetWeighings);
   for (var i = 0; i < rowsW.length; i++) {
     if (String(rowsW[i].flock_id) === String(flockId) &&
-        Number(rowsW[i].week) === Number(week)) {
+        (String(rowsW[i].id) === String(key) ||
+         String(rowsW[i].date) === String(key) ||
+         Number(rowsW[i].age_days) === Number(key) ||
+         Number(rowsW[i].week) === Number(key))) {
       sheetWeighings.deleteRow(rowsW[i]._rowIndex);
       break;
     }

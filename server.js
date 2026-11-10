@@ -309,8 +309,9 @@ app.delete('/api/flocks/:id', async (req, res) => {
 app.post('/api/flocks/:id/weighings', upload.single('photo'), async (req, res) => {
   try {
     const flockId = req.params.id;
-    const {
+    let {
       week,
+      day,
       date,
       ageDays,
       avgWeight,
@@ -329,13 +330,16 @@ app.post('/api/flocks/:id/weighings', upload.single('photo'), async (req, res) =
       healthNote
     } = req.body;
 
+    const finalAgeDays = Number(day != null ? day : (ageDays != null ? ageDays : (week != null ? Number(week) * 7 : 0)));
+    const finalWeek = Number(week != null && week !== '' ? week : Math.max(1, Math.ceil(finalAgeDays / 7)));
+
     const populationValues = [populationAdded, populationDecreased, populationShipped]
       .map(value => Number(value || 0));
     const eggCountValue = Number(eggCount || 0);
     const eggWeightValue = Number(eggWeightKg || 0);
     const feedValue = Number(feedIntakeKg || 0);
-    if (!Number.isInteger(Number(week)) || Number(week) < 0 || !date) {
-      return res.status(400).json({ success: false, error: 'Minggu monitoring dan tanggal harus diisi dengan benar.' });
+    if (!Number.isFinite(finalAgeDays) || finalAgeDays < 0 || !date) {
+      return res.status(400).json({ success: false, error: 'Hari monitoring dan tanggal harus diisi dengan benar.' });
     }
     if (populationValues.some(value => !Number.isInteger(value) || value < 0)
       || !Number.isInteger(eggCountValue) || eggCountValue < 0
@@ -371,11 +375,12 @@ app.post('/api/flocks/:id/weighings', upload.single('photo'), async (req, res) =
 
     const payload = {
       flockId,
-      week: Number(week),
+      week: finalWeek,
+      day: finalAgeDays,
       date,
-      ageDays: Number(ageDays || Number(week) * 7),
-      avgWeight: parseFloat(avgWeight),
-      targetWeight: parseFloat(targetWeight || avgWeight),
+      ageDays: finalAgeDays,
+      avgWeight: parseFloat(avgWeight || 0),
+      targetWeight: parseFloat(targetWeight || avgWeight || 0),
       sampleCount: Number(sampleCount || (parsedSamples.length > 0 ? parsedSamples.length : 30)),
       samples: parsedSamples,
       uniformity: parseFloat(uniformity || 90),
@@ -399,7 +404,7 @@ app.post('/api/flocks/:id/weighings', upload.single('photo'), async (req, res) =
         success: true,
         cloud: true,
         provider: providerName,
-        message: `Data penimbangan minggu ke-${week} tersimpan di ${providerName}!`,
+        message: `Data monitoring hari ke-${finalAgeDays} tersimpan di ${providerName}!`,
         data: {
           flock: updatedFlock,
           weighings: updatedWeighings
@@ -425,16 +430,16 @@ app.post('/api/flocks/:id/weighings', upload.single('photo'), async (req, res) =
   }
 });
 
-// 6. Hapus Penimbangan Mingguan
-app.delete('/api/flocks/:id/weighings/:week', async (req, res) => {
+// 6. Hapus Penimbangan
+app.delete('/api/flocks/:id/weighings/:key', async (req, res) => {
   try {
-    const { id, week } = req.params;
+    const { id, key } = req.params;
     if (cloudAdapter) {
-      await cloudAdapter.deleteWeighing(id, week);
-      return res.json({ success: true, message: `Data minggu ke-${week} telah dihapus dari ${providerName}.` });
+      await cloudAdapter.deleteWeighing(id, key);
+      return res.json({ success: true, message: `Data telah dihapus dari ${providerName}.` });
     }
-    localDb.deleteWeighing(id, week);
-    res.json({ success: true, message: `Data penimbangan minggu ke-${week} berhasil dihapus.` });
+    localDb.deleteWeighing(id, key);
+    res.json({ success: true, message: `Data monitoring berhasil dihapus.` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -55,9 +55,10 @@ class ApiClient {
               if (f.weighings && f.weighings.length > 0) {
                 for (const w of f.weighings) {
                   const fd = new FormData();
-                  fd.append('week', w.week);
+                  fd.append('day', w.day || w.ageDays || w.week * 7);
+                  fd.append('week', w.week || Math.max(1, Math.ceil((w.day || w.ageDays || 7) / 7)));
                   fd.append('date', w.date);
-                  fd.append('ageDays', w.ageDays || w.week * 7);
+                  fd.append('ageDays', w.ageDays || w.day || w.week * 7);
                   fd.append('avgWeight', w.avgWeight);
                   fd.append('targetWeight', w.targetWeight);
                   fd.append('sampleCount', w.sampleCount || 30);

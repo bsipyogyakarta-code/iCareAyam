@@ -24,15 +24,53 @@ const brmpColors = {
   gridLight: 'rgba(36, 88, 11, 0.08)'
 };
 
+function getStandardWeightForDay(breedStandard, day) {
+  if (!breedStandard || !breedStandard.weeklyStandards) return null;
+  const standards = breedStandard.weeklyStandards;
+  const weekExact = day / 7;
+  const wLower = Math.floor(weekExact);
+  const wUpper = Math.ceil(weekExact);
+  const stdLower = standards.find(s => Number(s.week) === wLower);
+  const stdUpper = standards.find(s => Number(s.week) === wUpper);
+  if (wLower === wUpper && stdLower) {
+    return {
+      standard: stdLower.standardWeight,
+      min: stdLower.minWeight,
+      max: stdLower.maxWeight
+    };
+  }
+  if (stdLower && stdUpper) {
+    const frac = weekExact - wLower;
+    return {
+      standard: Math.round(stdLower.standardWeight + frac * (stdUpper.standardWeight - stdLower.standardWeight)),
+      min: Math.round(stdLower.minWeight + frac * (stdUpper.minWeight - stdLower.minWeight)),
+      max: Math.round(stdLower.maxWeight + frac * (stdUpper.maxWeight - stdLower.maxWeight))
+    };
+  }
+  if (stdLower) return { standard: stdLower.standardWeight, min: stdLower.minWeight, max: stdLower.maxWeight };
+  if (stdUpper) return { standard: stdUpper.standardWeight, min: stdUpper.minWeight, max: stdUpper.maxWeight };
+  return null;
+}
+
 function renderGrowthChart(flock, breedStandard) {
   const ctx = document.getElementById('growthChart');
   if (!ctx) return;
 
   const weighings = flock?.weighings || [];
-  const maxWeek = Math.max(
-    weighings.length > 0 ? weighings[weighings.length - 1].week : 0,
-    breedStandard ? breedStandard.harvestWeek : 8
-  );
+  
+  // Kumpulkan hari-hari pencatatan aktual
+  const recordedDays = weighings.map(entry => Number(entry.day != null ? entry.day : (entry.ageDays != null ? entry.ageDays : Number(entry.week || 0) * 7)));
+  const maxRecordedDay = recordedDays.length > 0 ? Math.max(...recordedDays) : 0;
+  const harvestDay = (breedStandard?.harvestWeek || 6) * 7;
+  const maxDay = Math.max(maxRecordedDay, harvestDay);
+
+  // Buat array hari unik (termasuk kelipatan 7 / mingguan standar)
+  const daysSet = new Set([0]);
+  for (let d = 7; d <= maxDay; d += 7) {
+    daysSet.add(d);
+  }
+  recordedDays.forEach(d => daysSet.add(d));
+  const sortedDays = Array.from(daysSet).sort((a, b) => a - b);
 
   const labels = [];
   const actualData = [];
@@ -40,17 +78,20 @@ function renderGrowthChart(flock, breedStandard) {
   const minTargetData = [];
   const maxTargetData = [];
 
-  for (let w = 0; w <= maxWeek; w++) {
-    labels.push(w === 0 ? 'DOC (M0)' : `Minggu ${w}`);
+  for (const d of sortedDays) {
+    labels.push(d === 0 ? 'DOC (H0)' : `Hari ${d}`);
 
-    const actualEntry = weighings.find(entry => Number(entry.week) === w);
+    const actualEntry = weighings.find(entry => {
+      const entryDay = Number(entry.day != null ? entry.day : (entry.ageDays != null ? entry.ageDays : Number(entry.week || 0) * 7));
+      return entryDay === d;
+    });
     actualData.push(actualEntry ? actualEntry.avgWeight : null);
 
-    const stdEntry = breedStandard?.weeklyStandards?.find(s => Number(s.week) === w);
-    if (stdEntry) {
-      targetData.push(stdEntry.standardWeight);
-      minTargetData.push(stdEntry.minWeight);
-      maxTargetData.push(stdEntry.maxWeight);
+    const std = getStandardWeightForDay(breedStandard, d);
+    if (std) {
+      targetData.push(std.standard);
+      minTargetData.push(std.min);
+      maxTargetData.push(std.max);
     } else {
       targetData.push(null);
       minTargetData.push(null);
@@ -207,11 +248,13 @@ function renderGainChart(flock) {
   for (let i = 1; i < weighings.length; i++) {
     const prev = weighings[i - 1];
     const curr = weighings[i];
+    const prevDay = Number(prev.day != null ? prev.day : (prev.ageDays || Number(prev.week || 0) * 7));
+    const currDay = Number(curr.day != null ? curr.day : (curr.ageDays || Number(curr.week || 0) * 7));
     const gain = Number((curr.avgWeight - prev.avgWeight).toFixed(1));
-    const dayDiff = Math.max(1, (curr.ageDays || curr.week * 7) - (prev.ageDays || prev.week * 7));
+    const dayDiff = Math.max(1, currDay - prevDay);
     const adg = Number((gain / dayDiff).toFixed(1));
 
-    labels.push(`M${prev.week} ➔ M${curr.week}`);
+    labels.push(`H${prevDay} ➔ H${currDay}`);
     weeklyGains.push(gain);
     adgGains.push(adg);
   }
@@ -231,7 +274,7 @@ function renderGainChart(flock) {
       datasets: [
         {
           type: 'bar',
-          label: 'Pertambahan Mingguan (g/mgg)',
+          label: 'Pertambahan Bobot (gram)',
           data: weeklyGains,
           backgroundColor: isDarkMode ? '#3b82f6' : brmpColors.royalBlue,
           borderRadius: 6,
@@ -239,7 +282,7 @@ function renderGainChart(flock) {
         },
         {
           type: 'line',
-          label: 'Kenaikan Harian ADG (g/ekor/hari)',
+          label: 'Laju Harian ADG (g/ekor/hari)',
           data: adgGains,
           borderColor: brmpColors.emblemGold,
           backgroundColor: brmpColors.emblemGold,

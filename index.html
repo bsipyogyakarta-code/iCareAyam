@@ -73,11 +73,11 @@
       <div>
         <span id="categoryStep" class="category-step">Jenis pemeliharaan</span>
         <h1 id="categoryTitle">Ayam Pedaging</h1>
-        <p id="categoryHelp">Catat pakan, jumlah ayam, dan bobot setiap minggu.</p>
+        <p id="categoryHelp">Catat pakan, jumlah ayam, dan bobot setiap hari.</p>
       </div>
       <button id="btnCategoryAdd" class="btn btn-primary category-add-btn" type="button">
         <i class="fa-solid fa-plus"></i>
-        <span>Catat Minggu Ini</span>
+        <span>Catat Hari Ini</span>
       </button>
     </section>
 
@@ -263,13 +263,13 @@
         </div>
       </section>
 
-      <!-- Sub Charts Row: Pertambahan Bobot Mingguan + ADG -->
+      <!-- Sub Charts Row: Pertambahan Bobot Harian + ADG -->
       <section class="sub-charts-row">
         <div class="card">
           <div class="card-header">
             <div class="card-title-group">
-              <h2>Kenaikan Bobot per Minggu (Gain) & Rata-rata Kenaikan Harian (ADG)</h2>
-              <p>Mendeteksi apakah terjadi perlambatan pertumbuhan pada minggu tertentu</p>
+              <h2>Kenaikan Bobot Harian (Gain) & Rata-rata Kenaikan Harian (ADG)</h2>
+              <p>Mendeteksi laju pertambahan bobot ayam antar hari pencatatan</p>
             </div>
           </div>
           <div class="chart-wrapper" style="height: 270px;">
@@ -285,10 +285,10 @@
         <div class="table-toolbar">
           <div>
             <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.15rem; font-weight: 700;">
-              <span id="monitoringTableTitle">Rekapitulasi Monitoring</span>
+              <span id="monitoringTableTitle">Rekapitulasi Monitoring Harian</span>
             </h2>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">
-              Riwayat catatan untuk kandang ini
+              Riwayat catatan harian untuk kandang ini
             </p>
           </div>
 
@@ -330,19 +330,19 @@
       <div class="modal-header">
         <div>
           <span class="form-category-label">Khusus ayam pedaging</span>
-          <h3 id="broilerFormTitle">Catat Ayam Pedaging</h3>
+          <h3 id="broilerFormTitle">Catat Harian Ayam Pedaging</h3>
         </div>
         <button type="button" class="modal-close-btn" aria-label="Tutup">&times;</button>
       </div>
 
       <form id="formBroilerMonitoring">
         <div class="modal-body">
-          <p class="form-intro">Isi data untuk minggu ini. Kolom bertanda * wajib diisi.</p>
+          <p class="form-intro">Isi data pencatatan untuk hari ini. Kolom bertanda * wajib diisi.</p>
           <div class="form-row">
             <div class="form-group">
-              <label for="broilerWeek">Minggu ke- *</label>
-              <input type="number" id="broilerWeek" min="0" max="52" required>
-              <span class="form-hint">Contoh: minggu pertama isi 1.</span>
+              <label for="broilerDay">Hari ke- (Umur Hari) *</label>
+              <input type="number" id="broilerDay" min="0" max="365" required>
+              <span class="form-hint">Contoh: hari pertama isi 1.</span>
             </div>
             <div class="form-group">
               <label for="broilerDate">Tanggal pencatatan *</label>
@@ -355,8 +355,8 @@
               <input type="number" id="broilerWeight" min="1" step="0.1" required placeholder="Contoh: 425">
             </div>
             <div class="form-group">
-              <label for="broilerFeed">Pakan diberikan (kg) *</label>
-              <input type="number" id="broilerFeed" min="0" step="0.1" required placeholder="Contoh: 80">
+              <label for="broilerFeed">Pakan harian diberikan (kg) *</label>
+              <input type="number" id="broilerFeed" min="0" step="0.1" required placeholder="Contoh: 15">
             </div>
           </div>
           <div class="form-section-label">Perubahan jumlah ayam (isi 0 bila tidak ada)</div>
@@ -381,7 +381,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline btn-close-modal">Batal</button>
-          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Simpan Catatan Pedaging</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Simpan Catatan Harian</button>
         </div>
       </form>
     </div>
@@ -392,19 +392,19 @@
       <div class="modal-header">
         <div>
           <span class="form-category-label">Khusus ayam petelur</span>
-          <h3 id="layerFormTitle">Catat Produksi Telur</h3>
+          <h3 id="layerFormTitle">Catat Produksi Harian Telur</h3>
         </div>
         <button type="button" class="modal-close-btn" aria-label="Tutup">&times;</button>
       </div>
 
       <form id="formLayerProduction">
         <div class="modal-body">
-          <p class="form-intro">Isi hasil minggu ini. Data petelur dicatat terpisah dari ayam pedaging.</p>
+          <p class="form-intro">Isi hasil pencatatan hari ini. Data petelur dicatat terpisah dari ayam pedaging.</p>
           <div class="form-row">
             <div class="form-group">
-              <label for="layerWeek">Minggu ke- *</label>
-              <input type="number" id="layerWeek" min="0" max="52" required>
-              <span class="form-hint">Contoh: minggu pertama isi 1.</span>
+              <label for="layerDay">Hari ke- (Umur Hari) *</label>
+              <input type="number" id="layerDay" min="0" max="730" required>
+              <span class="form-hint">Contoh: hari pertama isi 1.</span>
             </div>
             <div class="form-group">
               <label for="layerDate">Tanggal pencatatan *</label>
@@ -413,17 +413,17 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="layerEggCount">Jumlah telur (butir) *</label>
+              <label for="layerEggCount">Jumlah telur hari ini (butir) *</label>
               <input type="number" id="layerEggCount" min="0" step="1" required placeholder="Contoh: 185">
             </div>
             <div class="form-group">
-              <label for="layerEggWeight">Total berat telur (kg) *</label>
+              <label for="layerEggWeight">Total berat telur hari ini (kg) *</label>
               <input type="number" id="layerEggWeight" min="0" step="0.01" required placeholder="Contoh: 11.25">
             </div>
           </div>
           <div class="form-group">
-            <label for="layerFeed">Pakan diberikan minggu ini (kg) *</label>
-            <input type="number" id="layerFeed" min="0" step="0.1" required placeholder="Contoh: 80">
+            <label for="layerFeed">Pakan harian diberikan (kg) *</label>
+            <input type="number" id="layerFeed" min="0" step="0.1" required placeholder="Contoh: 15">
           </div>
           <div class="form-section-label">Perubahan jumlah ayam (isi 0 bila tidak ada)</div>
           <div class="form-row">
@@ -447,7 +447,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline btn-close-modal">Batal</button>
-          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Simpan Catatan Petelur</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Simpan Catatan Harian</button>
         </div>
       </form>
     </div>
