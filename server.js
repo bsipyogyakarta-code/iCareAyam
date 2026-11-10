@@ -95,8 +95,8 @@ app.get('/api/status', (req, res) => {
     success: true,
     cloud: !!cloudAdapter,
     provider: providerName,
-    message: cloudAdapter 
-      ? `Database ${providerName} aktif. Data tersimpan di Cloud dan dapat diakses dari mana saja secara real-time.` 
+    message: cloudAdapter
+      ? `Database ${providerName} aktif. Data tersimpan di Cloud dan dapat diakses dari mana saja secara real-time.`
       : 'Database Cloud belum terhubung. Berjalan dalam mode database lokal.'
   });
 });

@@ -49,7 +49,7 @@ var WEIGHING_HEADERS = WEIGHING_LAYER_HEADERS;
 
 // Peta sinonim untuk mendukung pembacaan header Bahasa Indonesia maupun Bahasa Inggris lama
 var HEADER_MAP = {
-  // Weighings
+  // Weighings & Flocks
   'id': 'id',
   'id catatan': 'id',
   'flock_id': 'flock_id',
@@ -180,6 +180,9 @@ function getSheetObjects(sheet) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = ss.getSpreadsheetTimeZone() || 'Asia/Jakarta';
 
+  var sheetName = sheet.getName().toLowerCase();
+  var isFlockSheet = (sheetName.indexOf('kandang') !== -1 || sheetName.indexOf('flock') !== -1);
+
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
     var obj = { _rowIndex: i + 1 };
@@ -196,20 +199,42 @@ function getSheetObjects(sheet) {
         obj[headerText] = val;
       }
     }
+
+    // Normalisasi ID untuk sheet kandang vs penimbangan
+    if (isFlockSheet) {
+      var fId = obj.id || obj.flock_id || obj['ID Kandang'] || obj['id kandang'] || obj.code || obj['Kode Batch'];
+      if (fId) {
+        obj.id = String(fId);
+        obj.flock_id = String(fId);
+      }
+    } else {
+      if (!obj.id && obj['id catatan']) obj.id = String(obj['id catatan']);
+      if (!obj.id && obj['ID Catatan']) obj.id = String(obj['ID Catatan']);
+      if (!obj.flock_id && obj['id kandang']) obj.flock_id = String(obj['id kandang']);
+      if (!obj.flock_id && obj['ID Kandang']) obj.flock_id = String(obj['ID Kandang']);
+    }
+
     rows.push(obj);
   }
   return rows;
 }
 
 function findFlockByIdAcrossSheets(flockId) {
+  if (!flockId) return null;
+  var targetId = String(flockId).trim().toLowerCase();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheetNames = [SHEET_NAMES.FLOCK_BROILER, SHEET_NAMES.FLOCK_LAYER, 'Flocks'];
+
   for (var s = 0; s < sheetNames.length; s++) {
     var sheet = ss.getSheetByName(sheetNames[s]);
     if (!sheet) continue;
     var rows = getSheetObjects(sheet);
     for (var i = 0; i < rows.length; i++) {
-      if (String(rows[i].id) === String(flockId)) {
+      var fid = String(rows[i].id || rows[i].flock_id || rows[i]['ID Kandang'] || '').trim().toLowerCase();
+      var fcode = String(rows[i].code || rows[i]['Kode Batch'] || '').trim().toLowerCase();
+      if (fid === targetId || fcode === targetId) {
+        rows[i].id = rows[i].id || rows[i].flock_id || rows[i]['ID Kandang'];
+        rows[i].flock_id = rows[i].id;
         return { flock: rows[i], sheet: sheet, sheetName: sheetNames[s], rowIndex: rows[i]._rowIndex };
       }
     }
@@ -222,11 +247,17 @@ function cleanDuplicateRow(sheetName, flockId, id, date, ageDays) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) return;
   var rows = getSheetObjects(sheet);
+  var targetFlock = String(flockId || '').trim();
   for (var i = rows.length - 1; i >= 0; i--) {
-    if (String(rows[i].flock_id) === String(flockId) &&
-      (String(rows[i].id) === String(id) ||
-        (date && String(rows[i].date) === String(date)) ||
-        (ageDays > 0 && Number(rows[i].age_days) === ageDays))) {
+    var rFlk = String(rows[i].flock_id || rows[i]['ID Kandang'] || '').trim();
+    var rId = String(rows[i].id || rows[i]['ID Catatan'] || '').trim();
+    var rDate = String(rows[i].date || rows[i]['Tanggal Catat'] || '').trim();
+    var rAge = Number(rows[i].age_days != null ? rows[i].age_days : rows[i]['Hari Ke- (Umur)']);
+
+    if (rFlk === targetFlock &&
+      (rId === String(id) ||
+        (date && rDate === String(date)) ||
+        (ageDays > 0 && rAge === ageDays))) {
       sheet.deleteRow(rows[i]._rowIndex);
     }
   }
@@ -239,18 +270,17 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🐔 PoultryTrack BRMP')
     .addItem('📑 Pisahkan Sheet Pedaging & Petelur', 'pisahkanSheetPedagingDanPetelur')
-    .addItem('🇮🇩 Perbarui Header ke Bahasa Indonesia', 'perbaruiHeaderKeBahasaIndonesia')
     .addItem('✨ Rapikan Format Tabel & Kolom', 'rapikanTampilanSheet')
     .addToUi();
 }
 
 /**
- * Memisahkan dan merapikan sheet antara ayam pedaging dan petelur
+ * Memisahkan dan merapikan sheet antara ayam pedaging dan petelur secara menyeluruh
  */
 function pisahkanSheetPedagingDanPetelur() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 1. Buat 4 sheet khusus
+  // 1. Buat / dapatkan 4 sheet target
   var sheetFlockBroiler = getOrCreateSheet(SHEET_NAMES.FLOCK_BROILER, FLOCK_HEADERS);
   var sheetWeighBroiler = getOrCreateSheet(SHEET_NAMES.WEIGHING_BROILER, WEIGHING_BROILER_HEADERS);
   var sheetFlockLayer = getOrCreateSheet(SHEET_NAMES.FLOCK_LAYER, FLOCK_HEADERS);
@@ -263,135 +293,175 @@ function pisahkanSheetPedagingDanPetelur() {
     weighingsPetelur: 0
   };
 
-  var flockMap = {}; // id -> isLayer boolean
+  // Buat set ID yang sudah ada di sheet target untuk mencegah duplikasi
+  var existingBFlocks = getSheetObjects(sheetFlockBroiler);
+  var existingLFlocks = getSheetObjects(sheetFlockLayer);
+  var existingBIds = {};
+  for (var b = 0; b < existingBFlocks.length; b++) {
+    var bId = existingBFlocks[b].id || existingBFlocks[b].flock_id || existingBFlocks[b]['ID Kandang'];
+    if (bId) existingBIds[String(bId).trim()] = true;
+  }
+  var existingLIds = {};
+  for (var l = 0; l < existingLFlocks.length; l++) {
+    var lId = existingLFlocks[l].id || existingLFlocks[l].flock_id || existingLFlocks[l]['ID Kandang'];
+    if (lId) existingLIds[String(lId).trim()] = true;
+  }
 
-  // 2. Migrasikan data Flocks lama (dari sheet 'Flocks' jika ada)
-  var sheetOldFlocks = ss.getSheetByName('Flocks');
-  if (sheetOldFlocks) {
-    var oldFlocks = getSheetObjects(sheetOldFlocks);
-    var existingBFlocks = getSheetObjects(sheetFlockBroiler);
-    var existingLFlocks = getSheetObjects(sheetFlockLayer);
+  var flockMap = {}; // flockId -> isLayer boolean
 
-    var existingBIds = {};
-    for (var b = 0; b < existingBFlocks.length; b++) existingBIds[existingBFlocks[b].id] = true;
-    var existingLIds = {};
-    for (var l = 0; l < existingLFlocks.length; l++) existingLIds[existingLFlocks[l].id] = true;
+  // 2. Scan semua sheet kandang selain sheet target (misal sheet 'Flocks' lama)
+  var allSheets = ss.getSheets();
+  for (var s = 0; s < allSheets.length; s++) {
+    var sh = allSheets[s];
+    var sName = sh.getName();
+    if (sName === SHEET_NAMES.FLOCK_BROILER || sName === SHEET_NAMES.FLOCK_LAYER ||
+        sName === SHEET_NAMES.WEIGHING_BROILER || sName === SHEET_NAMES.WEIGHING_LAYER) {
+      continue;
+    }
 
-    for (var f = 0; f < oldFlocks.length; f++) {
-      var flk = oldFlocks[f];
-      var isLayer = isLayerFlock(flk);
-      flockMap[flk.id] = isLayer;
+    var sNameLower = sName.toLowerCase();
+    if (sNameLower.indexOf('flock') !== -1 || sNameLower.indexOf('kandang') !== -1) {
+      var oldFlocks = getSheetObjects(sh);
+      for (var f = 0; f < oldFlocks.length; f++) {
+        var flk = oldFlocks[f];
+        var flkId = String(flk.id || flk.flock_id || flk['ID Kandang'] || ('flock-' + f)).trim();
+        var isLayer = isLayerFlock(flk);
+        flockMap[flkId] = isLayer;
 
-      var rowData = [
-        flk.id,
-        flk.name || '',
-        flk.code || '',
-        flk.breed || (isLayer ? 'layer' : 'kub'),
-        flk.production_type || (isLayer ? 'layer' : 'broiler'),
-        flk.doc_date || '',
-        Number(flk.initial_pop || 0),
-        Number(flk.current_pop != null ? flk.current_pop : (flk.initial_pop || 0)),
-        flk.cage_type || '',
-        flk.location || '',
-        flk.officer || '',
-        flk.notes || '',
-        flk.created_at || new Date().toISOString()
-      ];
+        var rowData = [
+          flkId,
+          flk.name || flk['Nama Kandang'] || '',
+          flk.code || flk['Kode Batch'] || '',
+          flk.breed || flk['Jenis/Galur Ayam'] || (isLayer ? 'layer' : 'kub'),
+          flk.production_type || flk['Tipe Pemeliharaan'] || (isLayer ? 'layer' : 'broiler'),
+          flk.doc_date || flk['Tanggal DOC Masuk'] || '',
+          Number(flk.initial_pop != null ? flk.initial_pop : (flk['Populasi Awal (ekor)'] || 0)),
+          Number(flk.current_pop != null ? flk.current_pop : (flk['Populasi Saat Ini (ekor)'] != null ? flk['Populasi Saat Ini (ekor)'] : (flk.initial_pop || 0))),
+          flk.cage_type || flk['Tipe Kandang'] || '',
+          flk.location || flk['Lokasi Kandang'] || '',
+          flk.officer || flk['Petugas/PIC'] || '',
+          flk.notes || flk['Catatan Kandang'] || '',
+          flk.created_at || flk['Waktu Dibuat'] || new Date().toISOString()
+        ];
 
-      if (isLayer) {
-        if (!existingLIds[flk.id]) {
-          sheetFlockLayer.appendRow(rowData);
-          existingLIds[flk.id] = true;
-          stats.flocksPetelur++;
-        }
-      } else {
-        if (!existingBIds[flk.id]) {
-          sheetFlockBroiler.appendRow(rowData);
-          existingBIds[flk.id] = true;
-          stats.flocksPedaging++;
+        if (isLayer) {
+          if (!existingLIds[flkId]) {
+            sheetFlockLayer.appendRow(rowData);
+            existingLIds[flkId] = true;
+            stats.flocksPetelur++;
+          }
+        } else {
+          if (!existingBIds[flkId]) {
+            sheetFlockBroiler.appendRow(rowData);
+            existingBIds[flkId] = true;
+            stats.flocksPedaging++;
+          }
         }
       }
     }
   }
 
-  // Lengkapi peta jenis flok
-  var allFlocksCurrent = handleGetAllFlocks().data || [];
-  for (var k = 0; k < allFlocksCurrent.length; k++) {
-    flockMap[allFlocksCurrent[k].id] = isLayerFlock(allFlocksCurrent[k]);
+  // Lengkapi peta jenis flok dari sheet yang sudah ada
+  var currentB = getSheetObjects(sheetFlockBroiler);
+  for (var cb = 0; cb < currentB.length; cb++) {
+    var cbid = currentB[cb].id || currentB[cb].flock_id;
+    if (cbid) flockMap[String(cbid).trim()] = false;
+  }
+  var currentL = getSheetObjects(sheetFlockLayer);
+  for (var cl = 0; cl < currentL.length; cl++) {
+    var clid = currentL[cl].id || currentL[cl].flock_id;
+    if (clid) flockMap[String(clid).trim()] = true;
   }
 
-  // 3. Migrasikan data Weighings lama (dari sheet 'Weighings' jika ada)
-  var sheetOldWeighings = ss.getSheetByName('Weighings');
-  if (sheetOldWeighings) {
-    var oldWeighings = getSheetObjects(sheetOldWeighings);
-    var existingBWeighs = getSheetObjects(sheetWeighBroiler);
-    var existingLWeighs = getSheetObjects(sheetWeighLayer);
+  // 3. Scan semua sheet penimbangan selain sheet target (misal sheet 'Weighings' lama)
+  var existingBWeighs = getSheetObjects(sheetWeighBroiler);
+  var existingLWeighs = getSheetObjects(sheetWeighLayer);
+  var existingBWeighIds = {};
+  for (var bw = 0; bw < existingBWeighs.length; bw++) {
+    var bwid = existingBWeighs[bw].id || (existingBWeighs[bw].flock_id + '-' + existingBWeighs[bw].age_days);
+    if (bwid) existingBWeighIds[String(bwid).trim()] = true;
+  }
+  var existingLWeighIds = {};
+  for (var lw = 0; lw < existingLWeighs.length; lw++) {
+    var lwid = existingLWeighs[lw].id || (existingLWeighs[lw].flock_id + '-' + existingLWeighs[lw].age_days);
+    if (lwid) existingLWeighIds[String(lwid).trim()] = true;
+  }
 
-    var existingBWeighIds = {};
-    for (var bw = 0; bw < existingBWeighs.length; bw++) existingBWeighIds[existingBWeighs[bw].id] = true;
-    var existingLWeighIds = {};
-    for (var lw = 0; lw < existingLWeighs.length; lw++) existingLWeighIds[existingLWeighs[lw].id] = true;
+  for (var s2 = 0; s2 < allSheets.length; s2++) {
+    var sh2 = allSheets[s2];
+    var s2Name = sh2.getName();
+    if (s2Name === SHEET_NAMES.FLOCK_BROILER || s2Name === SHEET_NAMES.FLOCK_LAYER ||
+        s2Name === SHEET_NAMES.WEIGHING_BROILER || s2Name === SHEET_NAMES.WEIGHING_LAYER) {
+      continue;
+    }
 
-    for (var w = 0; w < oldWeighings.length; w++) {
-      var wg = oldWeighings[w];
-      var isL = flockMap[wg.flock_id] || (Number(wg.egg_count || 0) > 0);
-      var samplesStr = typeof wg.samples_json === 'string'
-        ? wg.samples_json
-        : JSON.stringify(wg.samples_json || []);
+    var s2NameLower = s2Name.toLowerCase();
+    if (s2NameLower.indexOf('weigh') !== -1 || s2NameLower.indexOf('catatan') !== -1 || s2NameLower.indexOf('monitoring') !== -1) {
+      var oldWeighings = getSheetObjects(sh2);
+      for (var w = 0; w < oldWeighings.length; w++) {
+        var wg = oldWeighings[w];
+        var flockIdStr = String(wg.flock_id || wg['ID Kandang'] || '').trim();
+        var isL = (flockMap[flockIdStr] === true) || (Number(wg.egg_count || wg['Produksi Telur (butir)'] || 0) > 0);
+        var wid = String(wg.id || wg['ID Catatan'] || ('w-' + flockIdStr + '-d' + (wg.age_days || w))).trim();
 
-      if (isL) {
-        if (!existingLWeighIds[wg.id]) {
-          sheetWeighLayer.appendRow([
-            wg.id,
-            wg.flock_id,
-            Number(wg.week || 1),
-            wg.date || '',
-            Number(wg.age_days || 0),
-            Number(wg.avg_weight || 0),
-            Number(wg.target_weight || 0),
-            Number(wg.sample_count || 0),
-            samplesStr,
-            Number(wg.uniformity || 90),
-            Number(wg.feed_intake_kg || 0),
-            Number(wg.mortality || 0),
-            Number(wg.cull || 0),
-            Number(wg.population_added || 0),
-            Number(wg.population_decreased || 0),
-            Number(wg.population_shipped || 0),
-            Number(wg.egg_count || 0),
-            Number(wg.egg_weight_kg || 0),
-            wg.health_note || '',
-            wg.photo_url || '',
-            wg.created_at || new Date().toISOString()
-          ]);
-          existingLWeighIds[wg.id] = true;
-          stats.weighingsPetelur++;
-        }
-      } else {
-        if (!existingBWeighIds[wg.id]) {
-          sheetWeighBroiler.appendRow([
-            wg.id,
-            wg.flock_id,
-            Number(wg.week || 1),
-            wg.date || '',
-            Number(wg.age_days || 0),
-            Number(wg.avg_weight || 0),
-            Number(wg.target_weight || 0),
-            Number(wg.sample_count || 0),
-            samplesStr,
-            Number(wg.uniformity || 90),
-            Number(wg.feed_intake_kg || 0),
-            Number(wg.mortality || 0),
-            Number(wg.cull || 0),
-            Number(wg.population_added || 0),
-            Number(wg.population_decreased || 0),
-            Number(wg.population_shipped || 0),
-            wg.health_note || '',
-            wg.photo_url || '',
-            wg.created_at || new Date().toISOString()
-          ]);
-          existingBWeighIds[wg.id] = true;
-          stats.weighingsPedaging++;
+        var samplesStr = typeof wg.samples_json === 'string'
+          ? wg.samples_json
+          : JSON.stringify(wg.samples_json || wg['Data Sampel (JSON)'] || []);
+
+        if (isL) {
+          if (!existingLWeighIds[wid]) {
+            sheetWeighLayer.appendRow([
+              wid,
+              flockIdStr,
+              Number(wg.week || wg['Minggu Ke-'] || 1),
+              wg.date || wg['Tanggal Catat'] || '',
+              Number(wg.age_days != null ? wg.age_days : (wg['Hari Ke- (Umur)'] || 0)),
+              Number(wg.avg_weight != null ? wg.avg_weight : (wg['Bobot Rata-rata (gram)'] || 0)),
+              Number(wg.target_weight != null ? wg.target_weight : (wg['Target Bobot (gram)'] || 0)),
+              Number(wg.sample_count != null ? wg.sample_count : (wg['Jumlah Sampel (ekor)'] || 0)),
+              samplesStr,
+              Number(wg.uniformity != null ? wg.uniformity : (wg['Keseragaman (%)'] || 90)),
+              Number(wg.feed_intake_kg != null ? wg.feed_intake_kg : (wg['Pakan Harian (kg)'] || 0)),
+              Number(wg.mortality != null ? wg.mortality : (wg['Kematian (ekor)'] || 0)),
+              Number(wg.cull != null ? wg.cull : (wg['Afkir (ekor)'] || 0)),
+              Number(wg.population_added != null ? wg.population_added : (wg['Ayam Masuk (ekor)'] || 0)),
+              Number(wg.population_decreased != null ? wg.population_decreased : (wg['Ayam Berkurang (ekor)'] || 0)),
+              Number(wg.population_shipped != null ? wg.population_shipped : (wg['Ayam Dipanen/Keluar (ekor)'] || 0)),
+              Number(wg.egg_count != null ? wg.egg_count : (wg['Produksi Telur (butir)'] || 0)),
+              Number(wg.egg_weight_kg != null ? wg.egg_weight_kg : (wg['Bobot Telur (kg)'] || 0)),
+              wg.health_note || wg['Catatan Kesehatan'] || '',
+              wg.photo_url || wg['Foto Dokumentasi'] || '',
+              wg.created_at || wg['Waktu Input'] || new Date().toISOString()
+            ]);
+            existingLWeighIds[wid] = true;
+            stats.weighingsPetelur++;
+          }
+        } else {
+          if (!existingBWeighIds[wid]) {
+            sheetWeighBroiler.appendRow([
+              wid,
+              flockIdStr,
+              Number(wg.week || wg['Minggu Ke-'] || 1),
+              wg.date || wg['Tanggal Catat'] || '',
+              Number(wg.age_days != null ? wg.age_days : (wg['Hari Ke- (Umur)'] || 0)),
+              Number(wg.avg_weight != null ? wg.avg_weight : (wg['Bobot Rata-rata (gram)'] || 0)),
+              Number(wg.target_weight != null ? wg.target_weight : (wg['Target Bobot (gram)'] || 0)),
+              Number(wg.sample_count != null ? wg.sample_count : (wg['Jumlah Sampel (ekor)'] || 0)),
+              samplesStr,
+              Number(wg.uniformity != null ? wg.uniformity : (wg['Keseragaman (%)'] || 90)),
+              Number(wg.feed_intake_kg != null ? wg.feed_intake_kg : (wg['Pakan Harian (kg)'] || 0)),
+              Number(wg.mortality != null ? wg.mortality : (wg['Kematian (ekor)'] || 0)),
+              Number(wg.cull != null ? wg.cull : (wg['Afkir (ekor)'] || 0)),
+              Number(wg.population_added != null ? wg.population_added : (wg['Ayam Masuk (ekor)'] || 0)),
+              Number(wg.population_decreased != null ? wg.population_decreased : (wg['Ayam Berkurang (ekor)'] || 0)),
+              Number(wg.population_shipped != null ? wg.population_shipped : (wg['Ayam Dipanen/Keluar (ekor)'] || 0)),
+              wg.health_note || wg['Catatan Kesehatan'] || '',
+              wg.photo_url || wg['Foto Dokumentasi'] || '',
+              wg.created_at || wg['Waktu Input'] || new Date().toISOString()
+            ]);
+            existingBWeighIds[wid] = true;
+            stats.weighingsPedaging++;
+          }
         }
       }
     }
@@ -400,18 +470,26 @@ function pisahkanSheetPedagingDanPetelur() {
   // 4. Format header dan kolom semua target sheet
   var targetSheets = [sheetFlockBroiler, sheetWeighBroiler, sheetFlockLayer, sheetWeighLayer];
   for (var ts = 0; ts < targetSheets.length; ts++) {
-    var sh = targetSheets[ts];
-    var colCount = sh.getLastColumn();
+    var sh3 = targetSheets[ts];
+    var colCount = sh3.getLastColumn();
     if (colCount > 0) {
-      sh.getRange(1, 1, 1, colCount)
+      sh3.getRange(1, 1, 1, colCount)
         .setFontWeight('bold')
         .setBackground('#24580b')
         .setFontColor('#ffffff')
         .setHorizontalAlignment('center');
-      sh.setFrozenRows(1);
+      sh3.setFrozenRows(1);
       for (var c = 1; c <= colCount; c++) {
-        sh.autoResizeColumn(c);
+        sh3.autoResizeColumn(c);
       }
+    }
+  }
+
+  // 5. Hitung ulang populasi terkini untuk setiap flok
+  var allFlocksTotal = handleGetAllFlocks().data || [];
+  for (var tf = 0; tf < allFlocksTotal.length; tf++) {
+    if (allFlocksTotal[tf].id) {
+      recalculateCurrentPop(allFlocksTotal[tf].id);
     }
   }
 
@@ -478,7 +556,6 @@ function doGet(e) {
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
-    // Kunci eksekusi selama maksimal 30 detik untuk menghindari konflik baris
     lock.waitLock(30000);
 
     var contents = e && e.postData ? e.postData.contents : '{}';
@@ -551,8 +628,11 @@ function handleGetAllFlocks() {
     var rows = getSheetObjects(sheet);
     for (var i = 0; i < rows.length; i++) {
       var f = rows[i];
-      if (f.id && !seenIds[f.id]) {
-        seenIds[f.id] = true;
+      var fid = String(f.id || f.flock_id || f['ID Kandang'] || '').trim();
+      if (fid && !seenIds[fid]) {
+        f.id = fid;
+        f.flock_id = fid;
+        seenIds[fid] = true;
         allFlocks.push(f);
       }
     }
@@ -575,15 +655,16 @@ function handleCreateFlock(flock) {
   var targetSheetName = isLayer ? SHEET_NAMES.FLOCK_LAYER : SHEET_NAMES.FLOCK_BROILER;
   var sheet = getOrCreateSheet(targetSheetName, FLOCK_HEADERS);
   var now = new Date().toISOString();
+  var flockId = flock.id || ('flock-' + new Date().getTime());
   var rowData = [
-    flock.id || ('flock-' + new Date().getTime()),
+    flockId,
     flock.name || '',
     flock.code || '',
     flock.breed || (isLayer ? 'layer' : 'kub'),
     flock.production_type || flock.productionType || (isLayer ? 'layer' : 'broiler'),
     flock.doc_date || flock.docDate || '',
     Number(flock.initial_pop || flock.initialPop || 0),
-    Number(flock.current_pop || flock.currentPop || flock.initial_pop || 0),
+    Number(flock.current_pop || flock.currentPop || flock.initial_pop || flock.initialPop || 0),
     flock.cage_type || flock.cageType || '',
     flock.location || '',
     flock.officer || '',
@@ -614,12 +695,15 @@ function handleCreateFlock(flock) {
 function handleDeleteFlock(id) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var flockSheetNames = [SHEET_NAMES.FLOCK_BROILER, SHEET_NAMES.FLOCK_LAYER, 'Flocks'];
+  var targetId = String(id || '').trim().toLowerCase();
+
   for (var s = 0; s < flockSheetNames.length; s++) {
     var sheetF = ss.getSheetByName(flockSheetNames[s]);
     if (!sheetF) continue;
     var rowsFlocks = getSheetObjects(sheetF);
     for (var i = 0; i < rowsFlocks.length; i++) {
-      if (String(rowsFlocks[i].id) === String(id)) {
+      var fid = String(rowsFlocks[i].id || rowsFlocks[i].flock_id || rowsFlocks[i]['ID Kandang'] || '').trim().toLowerCase();
+      if (fid === targetId) {
         sheetF.deleteRow(rowsFlocks[i]._rowIndex);
         break;
       }
@@ -633,7 +717,8 @@ function handleDeleteFlock(id) {
     if (!sheetW) continue;
     var rowsW = getSheetObjects(sheetW);
     for (var j = rowsW.length - 1; j >= 0; j--) {
-      if (String(rowsW[j].flock_id) === String(id)) {
+      var wflk = String(rowsW[j].flock_id || rowsW[j]['ID Kandang'] || '').trim().toLowerCase();
+      if (wflk === targetId) {
         sheetW.deleteRow(rowsW[j]._rowIndex);
       }
     }
@@ -644,7 +729,8 @@ function handleDeleteFlock(id) {
 
 function handleGetWeighingsByFlock(flockId) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var flockInfo = findFlockByIdAcrossSheets(flockId);
+  var targetFlockId = String(flockId || '').trim();
+  var flockInfo = findFlockByIdAcrossSheets(targetFlockId);
   var candidateSheets = [];
 
   if (flockInfo && flockInfo.flock) {
@@ -665,10 +751,13 @@ function handleGetWeighingsByFlock(flockId) {
     if (!sheet) continue;
     var rows = getSheetObjects(sheet);
     for (var i = 0; i < rows.length; i++) {
-      if (String(rows[i].flock_id) === String(flockId)) {
-        var recId = rows[i].id || (rows[i].age_days + '-' + rows[i].date);
+      var rowFlockId = String(rows[i].flock_id || rows[i]['ID Kandang'] || '').trim();
+      if (rowFlockId === targetFlockId) {
+        var recId = String(rows[i].id || rows[i]['ID Catatan'] || (rows[i].age_days + '-' + rows[i].date)).trim();
         if (!seenIds[recId]) {
           seenIds[recId] = true;
+          rows[i].id = recId;
+          rows[i].flock_id = targetFlockId;
           filtered.push(rows[i]);
         }
       }
@@ -685,11 +774,12 @@ function handleGetWeighingsByFlock(flockId) {
 }
 
 function handleUpsertWeighing(weighing) {
-  var flockInfo = findFlockByIdAcrossSheets(weighing.flock_id);
+  var flockId = String(weighing.flock_id || weighing.flockId || '').trim();
+  var flockInfo = findFlockByIdAcrossSheets(flockId);
   var isLayer = false;
 
-  if (weighing.production_type) {
-    var p = String(weighing.production_type).toLowerCase();
+  if (weighing.production_type || weighing.productionType) {
+    var p = String(weighing.production_type || weighing.productionType).toLowerCase();
     isLayer = (p === 'layer' || p === 'petelur');
   } else if (flockInfo && flockInfo.flock) {
     isLayer = isLayerFlock(flockInfo.flock);
@@ -700,16 +790,21 @@ function handleUpsertWeighing(weighing) {
   var sheetWeighings = getOrCreateSheet(targetSheetName, targetHeaders);
   var rowsW = getSheetObjects(sheetWeighings);
 
-  var ageDays = Number(weighing.age_days != null ? weighing.age_days : (Number(weighing.week || 1) * 7));
+  var ageDays = Number(weighing.age_days != null ? weighing.age_days : (weighing.day != null ? weighing.day : (Number(weighing.week || 1) * 7)));
   var week = Number(weighing.week || Math.max(1, Math.ceil(ageDays / 7)));
-  var id = weighing.id || ('w-' + weighing.flock_id + '-d' + ageDays + '-' + (weighing.date || 'rec'));
+  var id = weighing.id || ('w-' + flockId + '-d' + ageDays + '-' + (weighing.date || 'rec'));
   var existingRowIndex = -1;
 
   for (var i = 0; i < rowsW.length; i++) {
-    if (String(rowsW[i].flock_id) === String(weighing.flock_id) &&
-      (String(rowsW[i].id) === String(id) ||
-        String(rowsW[i].date) === String(weighing.date) ||
-        (Number(rowsW[i].age_days) === ageDays && ageDays > 0))) {
+    var rFlockId = String(rowsW[i].flock_id || rowsW[i]['ID Kandang'] || '').trim();
+    var rId = String(rowsW[i].id || rowsW[i]['ID Catatan'] || '').trim();
+    var rDate = String(rowsW[i].date || rowsW[i]['Tanggal Catat'] || '').trim();
+    var rAge = Number(rowsW[i].age_days != null ? rowsW[i].age_days : rowsW[i]['Hari Ke- (Umur)']);
+
+    if (rFlockId === flockId &&
+      (rId === String(id) ||
+        (weighing.date && rDate === String(weighing.date)) ||
+        (ageDays > 0 && rAge === ageDays))) {
       existingRowIndex = rowsW[i]._rowIndex;
       if (rowsW[i].photo_url && !weighing.photo_url) {
         weighing.photo_url = rowsW[i].photo_url;
@@ -726,7 +821,7 @@ function handleUpsertWeighing(weighing) {
   if (isLayer) {
     rowData = [
       id,
-      weighing.flock_id,
+      flockId,
       week,
       weighing.date || '',
       ageDays,
@@ -751,7 +846,7 @@ function handleUpsertWeighing(weighing) {
     // Pedaging / Broiler tanpa kolom telur
     rowData = [
       id,
-      weighing.flock_id,
+      flockId,
       week,
       weighing.date || '',
       ageDays,
@@ -780,28 +875,36 @@ function handleUpsertWeighing(weighing) {
 
   // Bersihkan dari sheet yang berlawanan dan legacy sheet jika pernah ada
   var oppositeSheetName = isLayer ? SHEET_NAMES.WEIGHING_BROILER : SHEET_NAMES.WEIGHING_LAYER;
-  cleanDuplicateRow(oppositeSheetName, weighing.flock_id, id, weighing.date, ageDays);
-  cleanDuplicateRow('Weighings', weighing.flock_id, id, weighing.date, ageDays);
+  cleanDuplicateRow(oppositeSheetName, flockId, id, weighing.date, ageDays);
+  cleanDuplicateRow('Weighings', flockId, id, weighing.date, ageDays);
 
-  recalculateCurrentPop(weighing.flock_id);
+  recalculateCurrentPop(flockId);
   return { success: true, id: id, sheet: targetSheetName };
 }
 
 function handleDeleteWeighing(flockId, key) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var weighSheetNames = [SHEET_NAMES.WEIGHING_BROILER, SHEET_NAMES.WEIGHING_LAYER, 'Weighings'];
+  var targetFlock = String(flockId || '').trim();
+  var targetKey = String(key || '').trim();
+
   for (var w = 0; w < weighSheetNames.length; w++) {
     var sheetW = ss.getSheetByName(weighSheetNames[w]);
     if (!sheetW) continue;
     var rowsW = getSheetObjects(sheetW);
-    for (var i = 0; i < rowsW.length; i++) {
-      if (String(rowsW[i].flock_id) === String(flockId) &&
-        (String(rowsW[i].id) === String(key) ||
-          String(rowsW[i].date) === String(key) ||
-          Number(rowsW[i].age_days) === Number(key) ||
-          Number(rowsW[i].week) === Number(key))) {
+    for (var i = rowsW.length - 1; i >= 0; i--) {
+      var rFlk = String(rowsW[i].flock_id || rowsW[i]['ID Kandang'] || '').trim();
+      var rId = String(rowsW[i].id || rowsW[i]['ID Catatan'] || '').trim();
+      var rDate = String(rowsW[i].date || rowsW[i]['Tanggal Catat'] || '').trim();
+      var rAge = Number(rowsW[i].age_days != null ? rowsW[i].age_days : rowsW[i]['Hari Ke- (Umur)']);
+      var rWk = Number(rowsW[i].week != null ? rowsW[i].week : rowsW[i]['Minggu Ke-']);
+
+      if (rFlk === targetFlock &&
+        (rId === targetKey ||
+          rDate === targetKey ||
+          rAge === Number(targetKey) ||
+          rWk === Number(targetKey))) {
         sheetW.deleteRow(rowsW[i]._rowIndex);
-        break;
       }
     }
   }
@@ -814,17 +917,17 @@ function recalculateCurrentPop(flockId) {
   var flockInfo = findFlockByIdAcrossSheets(flockId);
   if (!flockInfo || !flockInfo.flock || !flockInfo.sheet) return;
 
-  var currentPop = Number(flockInfo.flock.initial_pop) || 0;
+  var currentPop = Number(flockInfo.flock.initial_pop || flockInfo.flock['Populasi Awal (ekor)'] || 0);
   var weighingsRes = handleGetWeighingsByFlock(flockId);
   var weighings = weighingsRes.data || [];
 
   for (var j = 0; j < weighings.length; j++) {
     var w = weighings[j];
-    currentPop += (Number(w.population_added) || 0)
-      - (Number(w.population_decreased) || 0)
-      - (Number(w.population_shipped) || 0)
-      - (Number(w.mortality) || 0)
-      - (Number(w.cull) || 0);
+    currentPop += (Number(w.population_added || w['Ayam Masuk (ekor)'] || 0))
+      - (Number(w.population_decreased || w['Ayam Berkurang (ekor)'] || 0))
+      - (Number(w.population_shipped || w['Ayam Dipanen/Keluar (ekor)'] || 0))
+      - (Number(w.mortality || w['Kematian (ekor)'] || 0))
+      - (Number(w.cull || w['Afkir (ekor)'] || 0));
   }
 
   currentPop = Math.max(0, currentPop);

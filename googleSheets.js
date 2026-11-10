@@ -58,21 +58,24 @@ module.exports = {
   async getAllFlocks() {
     const result = await callScript('getAllFlocks');
     const flocks = result.data || [];
-    return flocks.map(f => ({
-      id: String(f.id || f['ID Kandang'] || ''),
-      name: f.name || f['Nama Kandang'] || '',
-      code: f.code || f['Kode Batch'] || '',
-      breed: f.breed || f['Jenis/Galur Ayam'] || 'kub',
-      production_type: f.production_type || f['Tipe Pemeliharaan'] || (f.breed === 'layer' ? 'layer' : 'broiler'),
-      doc_date: f.doc_date || f['Tanggal DOC Masuk'] || '',
-      initial_pop: Number(f.initial_pop != null ? f.initial_pop : (f['Populasi Awal (ekor)'] != null ? f['Populasi Awal (ekor)'] : 0)),
-      current_pop: Number(f.current_pop != null ? f.current_pop : (f['Populasi Saat Ini (ekor)'] != null ? f['Populasi Saat Ini (ekor)'] : f.initial_pop || 0)),
-      cage_type: f.cage_type || f['Tipe Kandang'] || '',
-      location: f.location || f['Lokasi Kandang'] || '',
-      officer: f.officer || f['Petugas/PIC'] || '',
-      notes: f.notes || f['Catatan Kandang'] || '',
-      created_at: f.created_at || f['Waktu Dibuat'] || new Date().toISOString()
-    }));
+    return flocks.map(f => {
+      const fid = String(f.id || f.flock_id || f['ID Kandang'] || f['id kandang'] || f.code || '');
+      return {
+        id: fid,
+        name: f.name || f['Nama Kandang'] || '',
+        code: f.code || f['Kode Batch'] || '',
+        breed: f.breed || f['Jenis/Galur Ayam'] || 'kub',
+        production_type: f.production_type || f['Tipe Pemeliharaan'] || (f.breed === 'layer' ? 'layer' : 'broiler'),
+        doc_date: f.doc_date || f['Tanggal DOC Masuk'] || '',
+        initial_pop: Number(f.initial_pop != null ? f.initial_pop : (f['Populasi Awal (ekor)'] != null ? f['Populasi Awal (ekor)'] : 0)),
+        current_pop: Number(f.current_pop != null ? f.current_pop : (f['Populasi Saat Ini (ekor)'] != null ? f['Populasi Saat Ini (ekor)'] : (f.initial_pop || 0))),
+        cage_type: f.cage_type || f['Tipe Kandang'] || '',
+        location: f.location || f['Lokasi Kandang'] || '',
+        officer: f.officer || f['Petugas/PIC'] || '',
+        notes: f.notes || f['Catatan Kandang'] || '',
+        created_at: f.created_at || f['Waktu Dibuat'] || new Date().toISOString()
+      };
+    });
   },
 
   // 2. Ambil Flok Berdasarkan ID
@@ -80,15 +83,16 @@ module.exports = {
     const result = await callScript('getFlockById', { id: String(id) });
     const f = result.data;
     if (!f) return null;
+    const fid = String(f.id || f.flock_id || f['ID Kandang'] || f['id kandang'] || f.code || id);
     return {
-      id: String(f.id || f['ID Kandang'] || ''),
+      id: fid,
       name: f.name || f['Nama Kandang'] || '',
       code: f.code || f['Kode Batch'] || '',
       breed: f.breed || f['Jenis/Galur Ayam'] || 'kub',
       production_type: f.production_type || f['Tipe Pemeliharaan'] || (f.breed === 'layer' ? 'layer' : 'broiler'),
       doc_date: f.doc_date || f['Tanggal DOC Masuk'] || '',
       initial_pop: Number(f.initial_pop != null ? f.initial_pop : (f['Populasi Awal (ekor)'] != null ? f['Populasi Awal (ekor)'] : 0)),
-      current_pop: Number(f.current_pop != null ? f.current_pop : (f['Populasi Saat Ini (ekor)'] != null ? f['Populasi Saat Ini (ekor)'] : f.initial_pop || 0)),
+      current_pop: Number(f.current_pop != null ? f.current_pop : (f['Populasi Saat Ini (ekor)'] != null ? f['Populasi Saat Ini (ekor)'] : (f.initial_pop || 0))),
       cage_type: f.cage_type || f['Tipe Kandang'] || '',
       location: f.location || f['Lokasi Kandang'] || '',
       officer: f.officer || f['Petugas/PIC'] || '',
@@ -99,8 +103,9 @@ module.exports = {
 
   // 3. Tambah Flok Baru
   async createFlock(flock) {
+    const flockId = flock.id || `flock-${Date.now()}`;
     const record = {
-      id: flock.id,
+      id: flockId,
       name: flock.name,
       code: flock.code,
       breed: flock.breed,
@@ -114,7 +119,22 @@ module.exports = {
       notes: flock.notes || ''
     };
     const result = await callScript('createFlock', { flock: record });
-    return result.data || record;
+    const created = result.data || record;
+    return {
+      id: String(created.id || flockId),
+      name: created.name || record.name,
+      code: created.code || record.code,
+      breed: created.breed || record.breed,
+      production_type: created.production_type || record.production_type,
+      doc_date: created.doc_date || record.doc_date,
+      initial_pop: Number(created.initial_pop != null ? created.initial_pop : record.initial_pop),
+      current_pop: Number(created.current_pop != null ? created.current_pop : record.current_pop),
+      cage_type: created.cage_type || record.cage_type,
+      location: created.location || record.location,
+      officer: created.officer || record.officer,
+      notes: created.notes || record.notes,
+      created_at: created.created_at || new Date().toISOString()
+    };
   },
 
   // 4. Hapus Flok
