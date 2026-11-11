@@ -24,30 +24,37 @@ const brmpColors = {
   gridLight: 'rgba(36, 88, 11, 0.08)'
 };
 
-function renderGrowthChart(flock) {
+function renderGrowthChart(flock, forcedType) {
   const ctx = document.getElementById('growthChart');
   if (!ctx) return;
 
+  const type = forcedType || flock?.productionType || (window.activeProductionType) || 'broiler';
+  const isLayer = type === 'layer';
   const weighings = flock?.weighings || [];
   
   // Kumpulkan hari-hari pencatatan aktual
   const recordedDays = weighings.map(entry => Number(entry.day != null ? entry.day : (entry.ageDays != null ? entry.ageDays : Number(entry.week || 0) * 7)));
   let sortedDays = Array.from(new Set(recordedDays)).sort((a, b) => a - b);
   if (sortedDays.length === 0) {
-    sortedDays = [0, 7, 14, 21, 28, 35];
+    sortedDays = isLayer ? [1, 7, 14, 21, 28, 35] : [0, 7, 14, 21, 28, 35];
   }
 
   const labels = [];
   const actualData = [];
 
   for (const d of sortedDays) {
-    labels.push(d === 0 ? 'DOC (H0)' : `Hari ${d}`);
+    labels.push(d === 0 && !isLayer ? 'DOC (H0)' : `Hari ${d}`);
 
     const actualEntry = weighings.find(entry => {
       const entryDay = Number(entry.day != null ? entry.day : (entry.ageDays != null ? entry.ageDays : Number(entry.week || 0) * 7));
       return entryDay === d;
     });
-    actualData.push(actualEntry ? actualEntry.avgWeight : null);
+
+    if (isLayer) {
+      actualData.push(actualEntry ? Number(actualEntry.eggCount || 0) : null);
+    } else {
+      actualData.push(actualEntry ? actualEntry.avgWeight : null);
+    }
   }
 
   if (growthChartInstance) {
@@ -57,7 +64,17 @@ function renderGrowthChart(flock) {
   const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
   const gridColor = isDarkMode ? brmpColors.gridDark : brmpColors.gridLight;
   const textColor = isDarkMode ? '#cbd5e1' : '#334835';
-  const actualLineColor = isDarkMode ? brmpColors.lightGreen : brmpColors.forestGreen;
+
+  const lineColor = isLayer
+    ? (isDarkMode ? '#fbbf24' : '#d97706')
+    : (isDarkMode ? brmpColors.lightGreen : brmpColors.forestGreen);
+
+  const bgColor = isLayer
+    ? (isDarkMode ? 'rgba(251, 191, 36, 0.22)' : 'rgba(217, 119, 6, 0.16)')
+    : (isDarkMode ? 'rgba(84, 180, 35, 0.22)' : 'rgba(36, 88, 11, 0.16)');
+
+  const datasetLabel = isLayer ? 'Produksi Telur (butir)' : 'Bobot Ayam (gram)';
+  const yAxisTitle = isLayer ? 'Produksi Telur (butir)' : 'Bobot Ayam (gram)';
 
   growthChartInstance = new Chart(ctx, {
     type: 'line',
@@ -65,12 +82,12 @@ function renderGrowthChart(flock) {
       labels: labels,
       datasets: [
         {
-          label: 'Bobot Ayam (gram)',
+          label: datasetLabel,
           data: actualData,
-          borderColor: actualLineColor,
-          backgroundColor: isDarkMode ? 'rgba(84, 180, 35, 0.22)' : 'rgba(36, 88, 11, 0.16)',
+          borderColor: lineColor,
+          backgroundColor: bgColor,
           borderWidth: 3,
-          pointBackgroundColor: actualLineColor,
+          pointBackgroundColor: lineColor,
           pointBorderColor: '#ffffff',
           pointBorderWidth: 2,
           pointRadius: 6,
@@ -107,6 +124,15 @@ function renderGrowthChart(flock) {
             label: function(context) {
               const val = context.raw;
               if (val === null || val === undefined) return null;
+              if (isLayer) {
+                const dayVal = sortedDays[context.dataIndex];
+                const entry = weighings.find(e => {
+                  const eDay = Number(e.day != null ? e.day : (e.ageDays != null ? e.ageDays : Number(e.week || 0) * 7));
+                  return eDay === dayVal;
+                });
+                const weightNote = entry && Number(entry.eggWeightKg) > 0 ? ` (${entry.eggWeightKg} kg)` : '';
+                return ` Produksi: ${val.toLocaleString('id-ID')} butir${weightNote}`;
+              }
               return ` Bobot: ${val.toLocaleString('id-ID')} gram`;
             }
           }
@@ -115,20 +141,26 @@ function renderGrowthChart(flock) {
       scales: {
         x: {
           grid: { color: gridColor },
+          title: {
+            display: true,
+            text: 'Hari ke- (Umur Hari)',
+            color: textColor,
+            font: { family: 'Plus Jakarta Sans', size: 12, weight: '700' }
+          },
           ticks: { color: textColor, font: { family: 'Plus Jakarta Sans', size: 11 } }
         },
         y: {
           grid: { color: gridColor },
           title: {
             display: true,
-            text: 'Bobot Ayam (gram)',
+            text: yAxisTitle,
             color: textColor,
             font: { family: 'Plus Jakarta Sans', size: 12, weight: '700' }
           },
           ticks: {
             color: textColor,
             font: { family: 'Plus Jakarta Sans', size: 11 },
-            callback: (val) => `${val} g`
+            callback: (val) => isLayer ? `${val} butir` : `${val} g`
           }
         }
       }

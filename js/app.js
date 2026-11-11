@@ -28,8 +28,8 @@ function toggleTheme() {
   localStorage.setItem('BRMP_THEME', newTheme);
   updateThemeIcon(newTheme);
 
-  if (activeProductionType === 'broiler' && currentActiveFlock) {
-    window.renderGrowthChart(currentActiveFlock);
+  if (currentActiveFlock) {
+    window.renderGrowthChart(currentActiveFlock, activeProductionType);
   }
 }
 
@@ -190,11 +190,27 @@ async function setActiveFlock(flock) {
   const isBroiler = activeProductionType === 'broiler';
   updateCategoryIntro();
   document.getElementById('btnViewStandards').style.display = isBroiler ? 'inline-flex' : 'none';
-  document.getElementById('broilerAnalytics').closest('details').style.display = isBroiler ? 'block' : 'none';
-  document.getElementById('broilerAnalytics').style.display = isBroiler ? 'block' : 'none';
+
+  const analyticsDetails = document.getElementById('analyticsDetails') || document.getElementById('broilerAnalytics')?.closest('details');
+  const analyticsContainer = document.getElementById('broilerAnalytics');
+  if (analyticsDetails) analyticsDetails.style.display = 'block';
+  if (analyticsContainer) analyticsContainer.style.display = 'block';
+
+  const chartTitle = document.getElementById('chartCardTitle');
+  const chartSubtitle = document.getElementById('chartCardSubtitle');
+  const summaryEl = document.getElementById('analyticsSummary');
+
   if (isBroiler) {
-    window.renderGrowthChart(currentActiveFlock);
+    if (summaryEl) summaryEl.textContent = 'Lihat grafik perkembangan bobot';
+    if (chartTitle) chartTitle.textContent = 'Grafik Perkembangan Bobot Ayam';
+    if (chartSubtitle) chartSubtitle.textContent = 'Grafik bobot ayam hasil penimbangan';
+  } else {
+    if (summaryEl) summaryEl.textContent = 'Lihat grafik produksi telur';
+    if (chartTitle) chartTitle.textContent = 'Grafik Produksi Telur Harian';
+    if (chartSubtitle) chartSubtitle.textContent = 'Grafik jumlah produksi telur berdasarkan hari ke- (umur hari)';
   }
+
+  window.renderGrowthChart(currentActiveFlock, activeProductionType);
   renderWeighingsTable();
 
   // Ambil data timbangan terbaru langsung dari server untuk kandang aktif ini
@@ -210,9 +226,7 @@ async function setActiveFlock(flock) {
       }
       renderFlockMeta();
       renderKPIs();
-      if (isBroiler) {
-        window.renderGrowthChart(currentActiveFlock);
-      }
+      window.renderGrowthChart(currentActiveFlock, activeProductionType);
       renderWeighingsTable();
     }
   } catch (err) {
@@ -374,14 +388,14 @@ function renderWeighingsTable() {
     : 'Rekapitulasi Monitoring Harian Ayam Pedaging';
   document.getElementById('monitoringTableHead').innerHTML = `<tr>${
     (isLayer
-      ? ['Hari ke-', 'Tanggal', 'Populasi', 'Jumlah Telur', 'Bobot Telur', 'Pakan Harian', 'Mutasi', 'Dokumentasi', 'Aksi']
-      : ['Hari ke-', 'Tanggal', 'Bobot Rata-rata', 'Pakan Harian', 'Bertambah', 'Berkurang', 'Dokumentasi', 'Aksi']
+      ? ['Hari ke-', 'Tanggal', 'Jumlah Ayam', 'Jumlah Telur', 'Bobot Telur', 'Pakan Harian', 'Mutasi', 'Aksi']
+      : ['Hari ke-', 'Tanggal', 'Jumlah Ayam', 'Bobot Rata-rata', 'Pakan Harian', 'Bertambah', 'Berkurang', 'Aksi']
     ).map(title => `<th>${title}</th>`).join('')
   }</tr>`;
   if (weighings.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="${isLayer ? 9 : 8}" style="text-align:center; padding: 2.5rem; color: var(--text-muted);">
+        <td colspan="8" style="text-align:center; padding: 2.5rem; color: var(--text-muted);">
           Belum ada catatan harian. Klik <strong>+ Catat Hari Ini</strong> untuk menambahkan data.
         </td>
       </tr>
@@ -391,15 +405,6 @@ function renderWeighingsTable() {
 
   tbody.innerHTML = weighings.map((w, index) => {
     const dayNum = Number(w.day != null ? w.day : (w.ageDays != null ? w.ageDays : Number(w.week || 0) * 7));
-    const photoCell = w.photoUrl ? `
-      <button type="button" class="doc-thumbnail-btn" onclick="openPhotoViewer('${w.photoUrl}', 'Dokumentasi Hari ${dayNum}', '${w.healthNote || ''}', '${formatDateIndo(w.date)}', '${isLayer ? `Telur: ${w.eggCount || 0} butir / ${w.eggWeightKg || 0} kg` : `Bobot: ${w.avgWeight} g`}')" title="Lihat Foto Dokumentasi">
-        <img src="${w.photoUrl}" alt="Foto hari ${dayNum}">
-      </button>
-    ` : `
-      <span class="doc-placeholder-icon" title="Belum ada foto dokumentasi">
-        <i class="fa-regular fa-image"></i>
-      </span>
-    `;
     const decreased = (Number(w.populationDecreased) || 0) + (Number(w.mortality) || 0) + (Number(w.cull) || 0);
     const movement = `+${Number(w.populationAdded) || 0} / -${decreased}`;
     const recordLabel = dayNum === 0 && !isLayer ? 'DOC (H0)' : `Hari ${dayNum}`;
@@ -417,8 +422,8 @@ function renderWeighingsTable() {
       <tr>
         <td><strong>${recordLabel}</strong></td>
         <td>${formatDateIndo(w.date)}</td>
+        <td>${Math.max(0, dayPopulation).toLocaleString('id-ID')} ekor</td>
         ${isLayer ? `
-          <td>${Math.max(0, dayPopulation).toLocaleString('id-ID')} ekor</td>
           <td>${Number(w.eggCount || 0).toLocaleString('id-ID')} butir</td>
           <td>${Number(w.eggWeightKg || 0).toLocaleString('id-ID')} kg</td>
           <td>${Number(w.feedIntakeKg || 0).toLocaleString('id-ID')} kg</td>
@@ -429,7 +434,6 @@ function renderWeighingsTable() {
           <td>${Number(w.populationAdded || 0).toLocaleString('id-ID')}</td>
           <td>${decreased.toLocaleString('id-ID')}</td>
         `}
-        <td style="text-align:center;">${photoCell}</td>
         <td>
           <div class="table-action-btns">
             <button class="btn btn-icon btn-sm" title="Edit data" onclick="openEditWeighingModal('${recordIdentifier}')">
@@ -741,9 +745,7 @@ async function saveDailyRecord(type) {
       }
       renderFlockMeta();
       renderKPIs();
-      if (activeProductionType === 'broiler') {
-        window.renderGrowthChart(currentActiveFlock);
-      }
+      window.renderGrowthChart(currentActiveFlock, activeProductionType);
       renderWeighingsTable();
     } else {
       await setActiveFlock(currentActiveFlock);
