@@ -39,11 +39,12 @@ function renderGrowthChart(flock, forcedType) {
     sortedDays = isLayer ? [1, 7, 14, 21, 28, 35] : [0, 7, 14, 21, 28, 35];
   }
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640;
   const labels = [];
   const actualData = [];
 
   for (const d of sortedDays) {
-    labels.push(d === 0 && !isLayer ? 'DOC (H0)' : `Hari ${d}`);
+    labels.push(d === 0 && !isLayer ? 'DOC' : `H-${d}`);
 
     const actualEntry = weighings.find(entry => {
       const entryDay = Number(entry.day != null ? entry.day : (entry.ageDays != null ? entry.ageDays : Number(entry.week || 0) * 7));
@@ -86,12 +87,12 @@ function renderGrowthChart(flock, forcedType) {
           data: actualData,
           borderColor: lineColor,
           backgroundColor: bgColor,
-          borderWidth: 3,
+          borderWidth: isMobile ? 2.5 : 3,
           pointBackgroundColor: lineColor,
           pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
+          pointBorderWidth: isMobile ? 1.5 : 2,
+          pointRadius: isMobile ? 4 : 6,
+          pointHoverRadius: isMobile ? 6 : 8,
           fill: true,
           tension: 0.35,
           spanGaps: true
@@ -101,14 +102,23 @@ function renderGrowthChart(flock, forcedType) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: {
+          left: isMobile ? 2 : 8,
+          right: isMobile ? 6 : 14,
+          top: isMobile ? 6 : 12,
+          bottom: isMobile ? 2 : 6
+        }
+      },
       plugins: {
         legend: {
           position: 'top',
           labels: {
             color: textColor,
-            font: { family: 'Plus Jakarta Sans', size: 12, weight: '600' },
+            font: { family: 'Plus Jakarta Sans', size: isMobile ? 11 : 12, weight: '600' },
             usePointStyle: true,
-            boxWidth: 8
+            boxWidth: isMobile ? 6 : 8,
+            padding: isMobile ? 8 : 12
           }
         },
         tooltip: {
@@ -117,10 +127,18 @@ function renderGrowthChart(flock, forcedType) {
           bodyColor: isDarkMode ? '#95ac98' : '#334835',
           borderColor: isDarkMode ? '#2c4431' : '#cdd9c8',
           borderWidth: 1.5,
-          padding: 12,
-          boxPadding: 6,
+          padding: isMobile ? 8 : 12,
+          boxPadding: 4,
           usePointStyle: true,
+          titleFont: { family: 'Plus Jakarta Sans', size: isMobile ? 11 : 13 },
+          bodyFont: { family: 'Plus Jakarta Sans', size: isMobile ? 11 : 12 },
           callbacks: {
+            title: function(items) {
+              if (!items || items.length === 0) return '';
+              const idx = items[0].dataIndex;
+              const dayVal = sortedDays[idx];
+              return dayVal === 0 && !isLayer ? 'DOC (Hari ke-0)' : `Hari ke-${dayVal} (Umur Hari)`;
+            },
             label: function(context) {
               const val = context.raw;
               if (val === null || val === undefined) return null;
@@ -142,25 +160,32 @@ function renderGrowthChart(flock, forcedType) {
         x: {
           grid: { color: gridColor },
           title: {
-            display: true,
+            display: !isMobile,
             text: 'Hari ke- (Umur Hari)',
             color: textColor,
             font: { family: 'Plus Jakarta Sans', size: 12, weight: '700' }
           },
-          ticks: { color: textColor, font: { family: 'Plus Jakarta Sans', size: 11 } }
+          ticks: {
+            color: textColor,
+            font: { family: 'Plus Jakarta Sans', size: isMobile ? 10 : 11 },
+            autoSkip: true,
+            maxTicksLimit: isMobile ? 7 : 14,
+            maxRotation: 0
+          }
         },
         y: {
           grid: { color: gridColor },
           title: {
-            display: true,
+            display: !isMobile,
             text: yAxisTitle,
             color: textColor,
             font: { family: 'Plus Jakarta Sans', size: 12, weight: '700' }
           },
           ticks: {
             color: textColor,
-            font: { family: 'Plus Jakarta Sans', size: 11 },
-            callback: (val) => isLayer ? `${val} butir` : `${val} g`
+            font: { family: 'Plus Jakarta Sans', size: isMobile ? 10 : 11 },
+            padding: isMobile ? 4 : 8,
+            callback: (val) => isLayer ? `${val}` : `${val}g`
           }
         }
       }

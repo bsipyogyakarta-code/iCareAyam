@@ -525,6 +525,27 @@ function setupEventListeners() {
     }
   });
 
+  const analyticsDetailsEl = document.getElementById('analyticsDetails');
+  if (analyticsDetailsEl) {
+    analyticsDetailsEl.addEventListener('toggle', () => {
+      if (analyticsDetailsEl.open && currentActiveFlock) {
+        setTimeout(() => {
+          window.renderGrowthChart(currentActiveFlock, activeProductionType);
+        }, 60);
+      }
+    });
+  }
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (currentActiveFlock) {
+        window.renderGrowthChart(currentActiveFlock, activeProductionType);
+      }
+    }, 150);
+  });
+
   const broilerPhoto = document.getElementById('broilerPhoto');
   if (broilerPhoto) broilerPhoto.addEventListener('change', validateMonitoringPhoto);
   const layerPhoto = document.getElementById('layerPhoto');
