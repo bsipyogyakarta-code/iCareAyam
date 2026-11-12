@@ -31,7 +31,7 @@ function renderGrowthChart(flock, forcedType) {
   const type = forcedType || flock?.productionType || (window.activeProductionType) || 'broiler';
   const isLayer = type === 'layer';
   const weighings = flock?.weighings || [];
-  
+
   // Kumpulkan hari-hari pencatatan aktual
   const recordedDays = weighings.map(entry => Number(entry.day != null ? entry.day : (entry.ageDays != null ? entry.ageDays : Number(entry.week || 0) * 7)));
   let sortedDays = Array.from(new Set(recordedDays)).sort((a, b) => a - b);
@@ -133,13 +133,13 @@ function renderGrowthChart(flock, forcedType) {
           titleFont: { family: 'Plus Jakarta Sans', size: isMobile ? 11 : 13 },
           bodyFont: { family: 'Plus Jakarta Sans', size: isMobile ? 11 : 12 },
           callbacks: {
-            title: function(items) {
+            title: function (items) {
               if (!items || items.length === 0) return '';
               const idx = items[0].dataIndex;
               const dayVal = sortedDays[idx];
               return dayVal === 0 && !isLayer ? 'DOC (Hari ke-0)' : `Hari ke-${dayVal} (Umur Hari)`;
             },
-            label: function(context) {
+            label: function (context) {
               const val = context.raw;
               if (val === null || val === undefined) return null;
               if (isLayer) {

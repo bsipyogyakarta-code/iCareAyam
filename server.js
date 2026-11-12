@@ -140,6 +140,19 @@ app.get('/api/sheets/diagnose', async (req, res) => {
   }
 });
 
+// Endpoint untuk mengosongkan seluruh data transaksi (Reset)
+app.all('/api/admin/clear-all', async (req, res) => {
+  try {
+    if (cloudAdapter && typeof cloudAdapter.clearAllData === 'function') {
+      const result = await cloudAdapter.clearAllData();
+      return res.json({ success: true, message: 'Seluruh data berhasil dikosongkan.', result });
+    }
+    res.status(400).json({ success: false, error: 'Google Sheets Adapter tidak aktif pada server ini.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 1. Ambil Semua Flok / Kandang
 app.get('/api/flocks', async (req, res) => {
   try {

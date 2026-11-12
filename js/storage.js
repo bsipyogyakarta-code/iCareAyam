@@ -45,9 +45,7 @@ class ApiClient {
       const res = await fetch(`${API_BASE}/flocks`);
       const json = await res.json();
       if (json.success) {
-        if (json.data && json.data.length > 0) {
-          this.saveLocalMirror(json.data);
-        }
+        this.saveLocalMirror(json.data || []);
         return json.data || [];
       }
       throw new Error(json.error || 'Gagal memuat data kandang/flok');
@@ -140,6 +138,22 @@ class ApiClient {
       throw new Error(json.error || 'Gagal menghapus data penimbangan');
     } catch (err) {
       console.error('API Error deleteWeighing:', err);
+      throw err;
+    }
+  }
+
+  async clearAllData() {
+    try {
+      const res = await fetch(`${API_BASE}/admin/clear-all`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        this.saveLocalMirror([]);
+        this.setActiveFlockId(null);
+        return json;
+      }
+      throw new Error(json.error || 'Gagal mengosongkan data');
+    } catch (err) {
+      console.error('API Error clearAllData:', err);
       throw err;
     }
   }

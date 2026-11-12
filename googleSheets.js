@@ -301,5 +301,11 @@ module.exports = {
   async diagnose() {
     const result = await callScript('diagnose');
     return result;
+  },
+
+  // 12. Kosongkan Seluruh Data Transaksi (Reset)
+  async clearAllData() {
+    const result = await callScript('clearAllData');
+    return result;
   }
 };

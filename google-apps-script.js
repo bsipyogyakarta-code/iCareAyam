@@ -271,6 +271,8 @@ function onOpen() {
     .createMenu('🐔 PoultryTrack BRMP')
     .addItem('📑 Pisahkan Sheet Pedaging & Petelur', 'pisahkanSheetPedagingDanPetelur')
     .addItem('✨ Rapikan Format Tabel & Kolom', 'rapikanTampilanSheet')
+    .addSeparator()
+    .addItem('⚠️ Kosongkan Semua Data (Reset)', 'kosongkanSemuaData')
     .addToUi();
 }
 
@@ -560,7 +562,7 @@ function doPost(e) {
   var result = {};
 
   // Hanya aksi penulisan data yang membutuhkan Lock agar aksi pembacaan data selalu instan & bebas antrian timeout
-  var isWriteAction = (action === 'createFlock' || action === 'deleteFlock' || action === 'upsertWeighing' || action === 'deleteWeighing' || action === 'separateSheets' || action === 'migrateSheets' || action === 'migrateHeaders');
+  var isWriteAction = (action === 'createFlock' || action === 'deleteFlock' || action === 'upsertWeighing' || action === 'deleteWeighing' || action === 'separateSheets' || action === 'migrateSheets' || action === 'migrateHeaders' || action === 'clearAllData');
   var lock = null;
   if (isWriteAction) {
     lock = LockService.getScriptLock();
@@ -622,6 +624,9 @@ function doPost(e) {
         break;
       case 'uploadPhoto':
         result = handleUploadPhoto(payload);
+        break;
+      case 'clearAllData':
+        result = kosongkanSemuaData();
         break;
       default:
         result = { success: false, error: 'Aksi "' + action + '" tidak dikenali.' };
@@ -725,6 +730,39 @@ function handleCreateFlock(flock) {
       notes: rowData[11],
       created_at: rowData[12]
     }
+  };
+}
+
+/**
+ * Mengosongkan seluruh data transaksi (kandang & rekaman harian)
+ * Tetap mempertahankan baris header kolom pada semua sheet
+ */
+function kosongkanSemuaData() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetNames = [
+    SHEET_NAMES.FLOCK_BROILER,
+    SHEET_NAMES.WEIGH_BROILER,
+    SHEET_NAMES.FLOCK_LAYER,
+    SHEET_NAMES.WEIGH_LAYER,
+    'Flocks',
+    'Weighings'
+  ];
+
+  var deletedCount = 0;
+  for (var i = 0; i < sheetNames.length; i++) {
+    var sheet = ss.getSheetByName(sheetNames[i]);
+    if (!sheet) continue;
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.deleteRows(2, lastRow - 1);
+      deletedCount += (lastRow - 1);
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Semua data kandang dan penimbangan berhasil dikosongkan. Header kolom tetap utuh.',
+    deletedRows: deletedCount
   };
 }
 
